@@ -15,6 +15,27 @@ $ cargo build --release
 
 You can find the compiled executable in `.../boop/target/release/`.
 
+## Getting Started
+
+**Boop**'s syntax is very simple, it's just maths. Since **Boop** has a REPL,
+let's do a quick calculation and follow what happens:
+
+```bash
+# define the variable `a` and set it to `10`
+=> a = 10
+  a = 10
+# define the function `square` which takes in the variable `x`;
+# it should multiply `x` by `2`
+=> square(x) = x * x
+  square(x) = x*x
+# then apply the function `square` the variable `a`
+=> square(a)
+  100
+```
+
+Internally, **Boop** uses a 128-bit fixed-point number split into two 64-bits
+for the integral and decimal parts.
+
 ## Licence
 
 All code in this project is dual-licenced under either:
