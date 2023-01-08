@@ -25,7 +25,7 @@ let's do a quick calculation and follow what happens:
 => a = 10
   a = 10
 # define the function `square` which takes in the variable `x`;
-# it should multiply `x` by `2`
+# it should square `x`
 => square(x) = x * x
   square(x) = x*x
 # then apply the function `square` the variable `a`
