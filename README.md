@@ -13,7 +13,7 @@ $ git clone https://github.com/leonskidev/boop
 $ cargo build --release
 ```
 
-You can find the compiled executable in `../boop/target/release/`.
+You can find the compiled executable in `.../boop/target/release/`.
 
 ## Licence
 
