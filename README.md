@@ -28,7 +28,7 @@ let's do a quick calculation and follow what happens:
 # it should square `x`
 => square(x) = x * x
   square(x) = x*x
-# then apply the function `square` the variable `a`
+# then apply the function `square` to the variable `a`
 => square(a)
   100
 ```
