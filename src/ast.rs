@@ -8,12 +8,20 @@ use fixed::{types::extra::U64, FixedI128};
 pub enum Stmt {
   /// An [`Expr`].
   Expr(Expr),
+  /// A variable assignment: `a = 123`.
+  VarDef {
+    /// The [`Ident`].
+    ident: Ident,
+    /// The [`Expr`].
+    expr: Expr,
+  },
 }
 
 impl fmt::Display for Stmt {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::Expr(expr) => write!(f, "{}", expr),
+      Self::VarDef { ident, expr } => write!(f, "{} = {}", ident, expr),
     }
   }
 }
@@ -26,6 +34,8 @@ pub enum Expr {
 
   /// A [`Lit`].
   Lit(Lit),
+  /// A variable usage: `a`.
+  Var(Ident),
 
   /// A unary operation: `-123`, `-a`.
   Unary(UnOp, Box<Expr>),
@@ -39,6 +49,7 @@ impl fmt::Display for Expr {
       Self::Error => write!(f, "<error>"),
 
       Self::Lit(lit) => write!(f, "{}", lit),
+      Self::Var(ident) => write!(f, "{}", ident),
 
       Self::Unary(op, rhs) => write!(f, "{}{}", op, rhs),
       Self::Binary(op, lhs, rhs) => match op {
@@ -54,6 +65,16 @@ impl fmt::Display for Expr {
 pub struct Lit(pub FixedI128<U64>);
 
 impl fmt::Display for Lit {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", self.0)
+  }
+}
+
+/// An identifier: `hello`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct Ident(pub String);
+
+impl fmt::Display for Ident {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.0)
   }

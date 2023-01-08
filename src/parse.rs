@@ -14,7 +14,12 @@ pub fn parser() -> impl Parser<char, Stmt, Error = Simple<char>> + Clone {
 impl Stmt {
   /// Creates a parser.
   pub fn parser() -> impl Parser<char, Self, Error = Simple<char>> + Clone {
-    Expr::parser().map(Self::Expr).padded()
+    let var_def = Ident::parser()
+      .then_ignore(just('='))
+      .then(Expr::parser())
+      .map(|(ident, expr)| Self::VarDef { ident, expr });
+
+    var_def.or(Expr::parser().map(Self::Expr)).padded()
   }
 }
 
@@ -22,8 +27,11 @@ impl Expr {
   /// Creates a parser.
   pub fn parser() -> impl Parser<char, Self, Error = Simple<char>> + Clone {
     recursive(|expr| {
+      let var = Ident::parser().map(Self::Var);
+
       let atom = Lit::parser()
         .map(Self::Lit)
+        .or(var)
         .or(expr.delimited_by(just('('), just(')')))
         .padded()
         .recover_with(nested_delimiters(
@@ -78,6 +86,13 @@ impl Lit {
       .unwrapped()
       .map(Self)
       .padded()
+  }
+}
+
+impl Ident {
+  /// Creates a parser.
+  pub fn parser() -> impl Parser<char, Self, Error = Simple<char>> + Clone {
+    text::ident().map(Self).padded()
   }
 }
 

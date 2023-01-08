@@ -7,7 +7,7 @@ use crate::ast::*;
 /// An evaluation context.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Context {
-  assignments: HashMap<Stmt, Expr>,
+  variables: HashMap<Ident, Expr>,
 }
 
 impl Stmt {
@@ -15,6 +15,12 @@ impl Stmt {
   pub fn eval(self, ctx: &mut Context) -> Self {
     match self {
       Self::Expr(expr) => Self::Expr(expr.eval(ctx)),
+      Self::VarDef { ident, expr } => {
+        let expr = expr.eval(ctx);
+        // TODO: maybe use a different return type?
+        ctx.variables.insert(ident.clone(), expr.clone());
+        Self::VarDef { ident, expr }
+      }
     }
   }
 }
@@ -26,6 +32,8 @@ impl Expr {
       Self::Error => todo!(),
 
       Self::Lit(lit) => Self::Lit(lit.eval(ctx)),
+      // TODO: handle errors
+      Self::Var(ident) => ctx.variables.get(&ident).cloned().unwrap(),
 
       Self::Unary(op, rhs) => match rhs.eval(ctx) {
         Expr::Lit(Lit(rhs)) => match op {
