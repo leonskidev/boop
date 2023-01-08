@@ -1,6 +1,6 @@
 [package]
 name = "boop"
-description = "Boop is the glorified calculator for all your not so scientific mathematical needs."
+description = "Boop is the glorified calculator for all your not so mathematical needs."
 authors = ["Leon Davis <leonskidev@pm.me>", "Shane Vandegrift <vandesm14@gmail.com>"]
 license = "MIT OR Apache-2.0"
 

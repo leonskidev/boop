@@ -1,7 +1,7 @@
 # Boop
 
-**Boop** is the glorified calculator for all your not so scientific mathematical
-needs. You can either use its REPL, or add it to your own project as a library.
+**Boop** is the glorified calculator for all your not so mathematical needs. You
+can either use its REPL, or add it to your own project as a library.
 
 ## Installation
 
