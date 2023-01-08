@@ -19,7 +19,27 @@ impl Stmt {
       .then(Expr::parser())
       .map(|(ident, expr)| Self::VarDef { ident, expr });
 
-    var_def.or(Expr::parser().map(Self::Expr)).padded()
+    let fn_def = Ident::parser()
+      .then(
+        Ident::parser()
+          .separated_by(text::whitespace())
+          .delimited_by(just('('), just(')')),
+      )
+      .padded()
+      .then_ignore(just('='))
+      .then(Expr::parser())
+      .map(|((ident, args), body)| Self::FnDef { ident, args, body });
+
+    fn_def
+      .or(var_def)
+      .or(Expr::parser().map(Self::Expr))
+      .padded()
+      .recover_with(nested_delimiters(
+        '(',
+        ')',
+        [('[', ']'), ('{', '}')],
+        |_| Self::Error,
+      ))
   }
 }
 
@@ -29,8 +49,18 @@ impl Expr {
     recursive(|expr| {
       let var = Ident::parser().map(Self::Var);
 
+      let r#fn = Ident::parser()
+        .then(
+          expr
+            .clone()
+            .separated_by(text::whitespace())
+            .delimited_by(just('('), just(')')),
+        )
+        .map(|(ident, args)| Self::Fn(ident, args));
+
       let atom = Lit::parser()
         .map(Self::Lit)
+        .or(r#fn)
         .or(var)
         .or(expr.delimited_by(just('('), just(')')))
         .padded()
@@ -38,7 +68,7 @@ impl Expr {
           '(',
           ')',
           [('[', ']'), ('{', '}')],
-          |_| Expr::Error,
+          |_| Self::Error,
         ));
 
       let unary = just('-')
