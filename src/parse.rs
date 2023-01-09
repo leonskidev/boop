@@ -4,9 +4,18 @@ use chumsky::prelude::*;
 
 use crate::ast::*;
 
-/// Creates a parser.
-pub fn parser() -> impl Parser<char, Stmt, Error = Simple<char>> + Clone {
+/// Creates a statement parser.
+pub fn stmt_parser() -> impl Parser<char, Stmt, Error = Simple<char>> + Clone {
   Stmt::parser()
+    .padded()
+    .then_ignore(end().recover_with(skip_then_retry_until([])))
+}
+
+/// Creates a file parser.
+pub fn file_parser(
+) -> impl Parser<char, Vec<Stmt>, Error = Simple<char>> + Clone {
+  Stmt::parser()
+    .separated_by(text::newline())
     .padded()
     .then_ignore(end().recover_with(skip_then_retry_until([])))
 }
