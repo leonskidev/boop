@@ -60,12 +60,12 @@ pub enum Expr {
   /// A variable usage: `a`.
   Var(Ident),
   /// A function usage: `f(a b)`.
-  Fn(Ident, Vec<Expr>),
+  Fn(Ident, Vec<Self>),
 
   /// A unary operation: `-123`, `-a`.
-  Unary(UnOp, Box<Expr>),
+  Unary(UnOp, Box<Self>),
   /// A binary operation: `a * 2`.
-  Binary(BinOp, Box<Expr>, Box<Expr>),
+  Binary(BinOp, Box<Self>, Box<Self>),
 }
 
 impl fmt::Display for Expr {
@@ -73,7 +73,7 @@ impl fmt::Display for Expr {
     match self {
       Self::Error => write!(f, "<error>"),
 
-      Self::Num(lit) => write!(f, "{}", lit),
+      Self::Num(num) => write!(f, "{}", num),
       Self::Var(ident) => write!(f, "{}", ident),
       Self::Fn(ident, args) => {
         write!(f, "{}(", ident)?;
@@ -90,24 +90,10 @@ impl fmt::Display for Expr {
 }
 
 /// A fixed-point literal: `1` or `1.23`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct Num(pub FixedI128<U64>);
+pub type Num = FixedI128<U64>;
 
-impl fmt::Display for Num {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{}", self.0)
-  }
-}
-
-/// An identifier: `hello`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct Ident(pub String);
-
-impl fmt::Display for Ident {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{}", self.0)
-  }
-}
+/// An identifier: `f`, `hello`.
+pub type Ident = String;
 
 /// A unary operator: `-`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

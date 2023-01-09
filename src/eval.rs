@@ -2,13 +2,31 @@
 
 use std::collections::HashMap;
 
-use crate::ast::*;
+use chumsky::{Parser, Stream};
+
+use crate::{ast::*, lex::Token};
 
 /// An evaluation context.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Context {
   vars: HashMap<Ident, Expr>,
   fns: HashMap<Ident, (Vec<Ident>, Expr)>,
+}
+
+impl Context {
+  /// Evaluates source code with this [`Context`].
+  pub fn eval(&mut self, source: &str) -> Option<Stmt> {
+    let tokens = Token::lexer().parse(source).unwrap();
+
+    if let Some(eoi) = tokens.last().map(|(_, eoi)| eoi).cloned() {
+      let stmt = Stmt::parser()
+        .parse(Stream::from_iter(eoi, tokens.into_iter()))
+        .unwrap();
+      Some(stmt.eval(self))
+    } else {
+      None
+    }
+  }
 }
 
 /// Implemented by types that can be evaluated into simpler forms.
@@ -65,17 +83,17 @@ impl Evaluate for Expr {
       }
 
       Self::Unary(op, rhs) => match rhs.eval(ctx) {
-        Expr::Num(Num(rhs)) => match op {
-          UnOp::Neg => Expr::Num(Num(-rhs)),
+        Expr::Num(rhs) => match op {
+          UnOp::Neg => Expr::Num(-rhs),
         },
         _ => unimplemented!(),
       },
       Self::Binary(op, lhs, rhs) => match (lhs.eval(ctx), rhs.eval(ctx)) {
-        (Expr::Num(Num(lhs)), Expr::Num(Num(rhs))) => match op {
-          BinOp::Add => Expr::Num(Num(lhs + rhs)),
-          BinOp::Sub => Expr::Num(Num(lhs - rhs)),
-          BinOp::Mul => Expr::Num(Num(lhs * rhs)),
-          BinOp::Div => Expr::Num(Num(lhs / rhs)),
+        (Expr::Num(lhs), Expr::Num(rhs)) => match op {
+          BinOp::Add => Expr::Num(lhs + rhs),
+          BinOp::Sub => Expr::Num(lhs - rhs),
+          BinOp::Mul => Expr::Num(lhs * rhs),
+          BinOp::Div => Expr::Num(lhs / rhs),
         },
         _ => unimplemented!(),
       },
