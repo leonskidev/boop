@@ -1,5 +1,8 @@
 use core::iter;
-use std::io::{self, Write};
+use std::{
+  io::{self, Write},
+  path::PathBuf,
+};
 
 use ariadne::{Color, Config, Fmt, Label, Report, ReportKind, Source};
 use boop::eval::Context;
@@ -9,6 +12,30 @@ fn main() {
   let cli: Cli = clap::Parser::parse();
 
   let mut ctx = Context::default();
+
+  cli
+    .libs
+    .into_iter()
+    .filter_map(|path| match std::fs::read_to_string(path) {
+      Ok(source) => Some(source),
+      Err(err) => {
+        eprintln!("WARN: {}", err);
+        None
+      }
+    })
+    .for_each(|source| {
+      let (stmts, errs) =
+        boop::parse::file_parser().parse_recovery(source.clone());
+
+      if errs.is_empty() {
+        // SAFETY: this would be a chumsky bug since there are no errors
+        stmts.unwrap().into_iter().for_each(|stmt| {
+          stmt.eval(&mut ctx);
+        });
+      } else {
+        handle_errors(source, errs);
+      }
+    });
 
   match cli.command {
     Command::Inline { source } => {
@@ -52,6 +79,13 @@ fn main() {
 struct Cli {
   #[command(subcommand)]
   command: Command,
+
+  // /// Whether to disable the standard library.
+  // #[arg(short, long)]
+  // no_std: bool,
+  /// List of library files to import.
+  #[arg(short, long)]
+  libs: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, clap::Subcommand)]
