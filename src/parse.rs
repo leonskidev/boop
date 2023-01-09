@@ -67,8 +67,8 @@ impl Expr {
         )
         .map(|(ident, args)| Self::Fn(ident, args));
 
-      let atom = Lit::parser()
-        .map(Self::Lit)
+      let atom = Num::parser()
+        .map(Self::Num)
         .or(r#fn)
         .or(var)
         .or(expr.delimited_by(just('('), just(')')))
@@ -115,7 +115,7 @@ impl Expr {
   }
 }
 
-impl Lit {
+impl Num {
   /// Creates a parser.
   pub fn parser() -> impl Parser<char, Self, Error = Simple<char>> + Clone {
     text::int(10)
@@ -141,25 +141,25 @@ mod tests {
   use fixed::{types::extra::U64, FixedI128};
   use test_case::case;
 
-  #[case("12" => Stmt::Expr(Expr::Lit(Lit(FixedI128::<U64>::from_num(12)))))]
+  #[case("12" => Stmt::Expr(Expr::Num(Num(FixedI128::<U64>::from_num(12)))))]
   fn stmt(input: &str) -> Stmt {
     Stmt::parser().parse(input).unwrap()
   }
 
-  #[case("12" => Expr::Lit(Lit(FixedI128::<U64>::from_num(12))))]
-  #[case("-1" => Expr::Unary(UnOp::Neg, Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(1))))))]
-  #[case("1 * 2" => Expr::Binary(BinOp::Mul, Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(2))))))]
-  #[case("1 + 2" => Expr::Binary(BinOp::Add, Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(2))))))]
-  #[case("1 + 2 * 3" => Expr::Binary(BinOp::Add, Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Binary(BinOp::Mul, Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(2)))), Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(3))))))))]
-  #[case("1 + -2 * 3" => Expr::Binary(BinOp::Add, Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Binary(BinOp::Mul, Box::new(Expr::Unary(UnOp::Neg, Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(2)))))), Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(3))))))))]
-  #[case("(1 + 2) * 3" => Expr::Binary(BinOp::Mul, Box::new(Expr::Binary(BinOp::Add, Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(2)))))), Box::new(Expr::Lit(Lit(FixedI128::<U64>::from_num(3))))))]
+  #[case("12" => Expr::Num(Num(FixedI128::<U64>::from_num(12))))]
+  #[case("-1" => Expr::Unary(UnOp::Neg, Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(1))))))]
+  #[case("1 * 2" => Expr::Binary(BinOp::Mul, Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(2))))))]
+  #[case("1 + 2" => Expr::Binary(BinOp::Add, Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(2))))))]
+  #[case("1 + 2 * 3" => Expr::Binary(BinOp::Add, Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Binary(BinOp::Mul, Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(2)))), Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(3))))))))]
+  #[case("1 + -2 * 3" => Expr::Binary(BinOp::Add, Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Binary(BinOp::Mul, Box::new(Expr::Unary(UnOp::Neg, Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(2)))))), Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(3))))))))]
+  #[case("(1 + 2) * 3" => Expr::Binary(BinOp::Mul, Box::new(Expr::Binary(BinOp::Add, Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(1)))), Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(2)))))), Box::new(Expr::Num(Num(FixedI128::<U64>::from_num(3))))))]
   fn expr(input: &str) -> Expr {
     Expr::parser().parse(input).unwrap()
   }
 
-  #[case("12" => Lit(FixedI128::<U64>::from_num(12)))]
-  #[case("1.5" => Lit(FixedI128::<U64>::from_num(1.5)))]
-  fn lit(input: &str) -> Lit {
-    Lit::parser().parse(input).unwrap()
+  #[case("12" => Num(FixedI128::<U64>::from_num(12)))]
+  #[case("1.5" => Num(FixedI128::<U64>::from_num(1.5)))]
+  fn lit(input: &str) -> Num {
+    Num::parser().parse(input).unwrap()
   }
 }

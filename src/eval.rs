@@ -40,7 +40,7 @@ impl Expr {
     match self {
       Self::Error => todo!(),
 
-      Self::Lit(lit) => Self::Lit(lit.eval(ctx)),
+      Self::Num(lit) => Self::Num(lit.eval(ctx)),
       // TODO: handle errors
       Self::Var(ident) => ctx.vars.get(&ident).cloned().unwrap(),
       Self::Fn(ident, args) => {
@@ -61,17 +61,17 @@ impl Expr {
       }
 
       Self::Unary(op, rhs) => match rhs.eval(ctx) {
-        Expr::Lit(Lit(rhs)) => match op {
-          UnOp::Neg => Expr::Lit(Lit(-rhs)),
+        Expr::Num(Num(rhs)) => match op {
+          UnOp::Neg => Expr::Num(Num(-rhs)),
         },
         _ => unimplemented!(),
       },
       Self::Binary(op, lhs, rhs) => match (lhs.eval(ctx), rhs.eval(ctx)) {
-        (Expr::Lit(Lit(lhs)), Expr::Lit(Lit(rhs))) => match op {
-          BinOp::Add => Expr::Lit(Lit(lhs + rhs)),
-          BinOp::Sub => Expr::Lit(Lit(lhs - rhs)),
-          BinOp::Mul => Expr::Lit(Lit(lhs * rhs)),
-          BinOp::Div => Expr::Lit(Lit(lhs / rhs)),
+        (Expr::Num(Num(lhs)), Expr::Num(Num(rhs))) => match op {
+          BinOp::Add => Expr::Num(Num(lhs + rhs)),
+          BinOp::Sub => Expr::Num(Num(lhs - rhs)),
+          BinOp::Mul => Expr::Num(Num(lhs * rhs)),
+          BinOp::Div => Expr::Num(Num(lhs / rhs)),
         },
         _ => unimplemented!(),
       },
@@ -79,7 +79,7 @@ impl Expr {
   }
 }
 
-impl Lit {
+impl Num {
   ///
   #[inline]
   pub fn eval(self, _ctx: &mut Context) -> Self {

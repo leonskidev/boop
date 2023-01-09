@@ -55,8 +55,8 @@ pub enum Expr {
   /// An invalid expression.
   Error,
 
-  /// A [`Lit`].
-  Lit(Lit),
+  /// A [`Num`].
+  Num(Num),
   /// A variable usage: `a`.
   Var(Ident),
   /// A function usage: `f(a b)`.
@@ -73,7 +73,7 @@ impl fmt::Display for Expr {
     match self {
       Self::Error => write!(f, "<error>"),
 
-      Self::Lit(lit) => write!(f, "{}", lit),
+      Self::Num(lit) => write!(f, "{}", lit),
       Self::Var(ident) => write!(f, "{}", ident),
       Self::Fn(ident, args) => {
         write!(f, "{}(", ident)?;
@@ -94,9 +94,9 @@ impl fmt::Display for Expr {
 
 /// A fixed-point literal: `1` or `1.23`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct Lit(pub FixedI128<U64>);
+pub struct Num(pub FixedI128<U64>);
 
-impl fmt::Display for Lit {
+impl fmt::Display for Num {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.0)
   }
