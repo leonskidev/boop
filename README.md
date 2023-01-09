@@ -20,7 +20,7 @@ You can find the compiled executable in `.../boop/target/release/`.
 **Boop**'s syntax is very simple, it's just maths. Since **Boop** has a REPL,
 let's do a quick calculation and follow what happens:
 
-```bash
+```py
 # define the variable `a` and set it to `10`
 => a := 10
   a := 10
