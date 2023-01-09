@@ -31,7 +31,7 @@ let's do a quick calculation and follow what happens:
 // then apply the function `square` to the variable `a`
 => square(a)
   100
-// let's do that again, but compare it agains our knowledge
+// let's compare it against our existing knowledge
 => 100 = square(a)
   100 = 100
 ```
