@@ -5,12 +5,12 @@ use std::{
 };
 
 // use ariadne::{Color, Config, Fmt, Label, Report, ReportKind, Source};
-use boop::eval::Context;
+use boop::eval::Evaluator;
 
 fn main() {
   let cli: Cli = clap::Parser::parse();
 
-  let mut ctx = Context::default();
+  let mut ctx = Evaluator::default();
 
   cli
     .libs

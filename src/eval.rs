@@ -1,4 +1,4 @@
-//! Contains the evaluator.
+//! Contains the [`Evaluator`].
 
 use std::collections::HashMap;
 
@@ -8,13 +8,13 @@ use crate::{ast::*, lex::Token};
 
 /// An evaluation context.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Context {
+pub struct Evaluator {
   vars: HashMap<Ident, Expr>,
   fns: HashMap<Ident, (Vec<Ident>, Expr)>,
 }
 
-impl Context {
-  /// Evaluates source code with this [`Context`].
+impl Evaluator {
+  /// Performs all the steps needed to evaluate source code.
   pub fn eval(&mut self, source: &str) -> Option<Stmt> {
     let tokens = Token::lexer().parse(source).unwrap();
 
@@ -32,11 +32,11 @@ impl Context {
 /// Implemented by types that can be evaluated into simpler forms.
 pub trait Evaluate {
   /// Evaluates this type into a simpler form.
-  fn eval(self, ctx: &mut Context) -> Self;
+  fn eval(self, ctx: &mut Evaluator) -> Self;
 }
 
 impl Evaluate for Stmt {
-  fn eval(self, ctx: &mut Context) -> Self {
+  fn eval(self, ctx: &mut Evaluator) -> Self {
     match self {
       Self::Error => todo!(),
 
@@ -58,7 +58,7 @@ impl Evaluate for Stmt {
 }
 
 impl Evaluate for Expr {
-  fn eval(self, ctx: &mut Context) -> Self {
+  fn eval(self, ctx: &mut Evaluator) -> Self {
     match self {
       Self::Error => todo!(),
 
@@ -69,7 +69,7 @@ impl Evaluate for Expr {
         // TODO: handle errors
         let (fn_args, fn_body) = ctx.fns.get(&ident).cloned().unwrap();
 
-        let mut scope = Context {
+        let mut scope = Evaluator {
           vars: ctx.vars.clone(),
           fns: HashMap::default(),
         };
@@ -103,7 +103,7 @@ impl Evaluate for Expr {
 
 impl Evaluate for Num {
   #[inline]
-  fn eval(self, _ctx: &mut Context) -> Self {
+  fn eval(self, _ctx: &mut Evaluator) -> Self {
     self
   }
 }
