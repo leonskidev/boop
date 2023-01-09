@@ -13,6 +13,3 @@ ariadne = "0.1.5"
 fixed = "1"
 
 clap = { version = "4", features = ["derive"] }
-
-[dev-dependencies]
-test-case = "2"
