@@ -31,7 +31,7 @@ impl Stmt {
     let fn_def = Ident::parser()
       .then(
         Ident::parser()
-          .separated_by(text::whitespace())
+          .separated_by(just(','))
           .delimited_by(just('('), just(')')),
       )
       .padded()
@@ -62,7 +62,7 @@ impl Expr {
         .then(
           expr
             .clone()
-            .separated_by(text::whitespace())
+            .separated_by(just(','))
             .delimited_by(just('('), just(')')),
         )
         .map(|(ident, args)| Self::Fn(ident, args));

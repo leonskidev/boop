@@ -41,7 +41,7 @@ impl fmt::Display for Stmt {
       Self::FnDef { ident, args, body } => {
         write!(f, "{}(", ident)?;
         args.iter().enumerate().try_for_each(|(i, ident)| {
-          write!(f, "{}{}", if i > 0 { " " } else { "" }, ident)
+          write!(f, "{}{}", if i > 0 { ", " } else { "" }, ident)
         })?;
         write!(f, ") = {}", body)
       }
@@ -78,7 +78,7 @@ impl fmt::Display for Expr {
       Self::Fn(ident, args) => {
         write!(f, "{}(", ident)?;
         args.iter().enumerate().try_for_each(|(i, expr)| {
-          write!(f, "{}{}", if i > 0 { " " } else { "" }, expr)
+          write!(f, "{}{}", if i > 0 { ", " } else { "" }, expr)
         })?;
         write!(f, ")")
       }
