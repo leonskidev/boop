@@ -12,14 +12,14 @@ pub enum Stmt {
   /// An [`Expr`].
   Expr(Expr),
 
-  /// A variable definition: `a = 123`.
+  /// A variable definition: `a := 123`.
   VarDef {
     /// The variable [`Ident`].
     ident: Ident,
     /// The variable [`Expr`].
     expr: Expr,
   },
-  /// A function definition: `f(a) = a * 2`.
+  /// A function definition: `f(a) := a * 2`.
   FnDef {
     /// The function [`Ident`].
     ident: Ident,
@@ -37,13 +37,13 @@ impl fmt::Display for Stmt {
 
       Self::Expr(expr) => write!(f, "{}", expr),
 
-      Self::VarDef { ident, expr } => write!(f, "{} = {}", ident, expr),
+      Self::VarDef { ident, expr } => write!(f, "{} := {}", ident, expr),
       Self::FnDef { ident, args, body } => {
         write!(f, "{}(", ident)?;
         args.iter().enumerate().try_for_each(|(i, ident)| {
           write!(f, "{}{}", if i > 0 { ", " } else { "" }, ident)
         })?;
-        write!(f, ") = {}", body)
+        write!(f, ") := {}", body)
       }
     }
   }

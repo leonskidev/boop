@@ -24,7 +24,7 @@ impl Stmt {
   /// Creates a parser.
   pub fn parser() -> impl Parser<char, Self, Error = Simple<char>> + Clone {
     let var_def = Ident::parser()
-      .then_ignore(just('='))
+      .then_ignore(just(":="))
       .then(Expr::parser())
       .map(|(ident, expr)| Self::VarDef { ident, expr });
 
@@ -35,7 +35,7 @@ impl Stmt {
           .delimited_by(just('('), just(')')),
       )
       .padded()
-      .then_ignore(just('='))
+      .then_ignore(just(":="))
       .then(Expr::parser())
       .map(|((ident, args), body)| Self::FnDef { ident, args, body });
 
