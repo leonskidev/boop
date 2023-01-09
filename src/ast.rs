@@ -84,10 +84,7 @@ impl fmt::Display for Expr {
       }
 
       Self::Unary(op, rhs) => write!(f, "{}{}", op, rhs),
-      Self::Binary(op, lhs, rhs) => match op {
-        BinOp::Add | BinOp::Sub => write!(f, "{} {} {}", lhs, op, rhs),
-        BinOp::Mul | BinOp::Div => write!(f, "{}{}{}", lhs, op, rhs),
-      },
+      Self::Binary(op, lhs, rhs) => write!(f, "{} {} {}", lhs, op, rhs),
     }
   }
 }
