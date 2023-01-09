@@ -5,7 +5,7 @@ use std::{
 };
 
 use ariadne::{Color, Config, Fmt, Label, Report, ReportKind, Source};
-use boop::eval::Context;
+use boop::eval::{Context, Evaluate};
 use chumsky::Parser;
 
 fn main() {

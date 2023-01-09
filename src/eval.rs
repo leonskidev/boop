@@ -11,9 +11,14 @@ pub struct Context {
   fns: HashMap<Ident, (Vec<Ident>, Expr)>,
 }
 
-impl Stmt {
-  ///
-  pub fn eval(self, ctx: &mut Context) -> Self {
+/// Implemented by types that can be evaluated into simpler forms.
+pub trait Evaluate {
+  /// Evaluates this type into a simpler form.
+  fn eval(self, ctx: &mut Context) -> Self;
+}
+
+impl Evaluate for Stmt {
+  fn eval(self, ctx: &mut Context) -> Self {
     match self {
       Self::Error => todo!(),
 
@@ -34,9 +39,8 @@ impl Stmt {
   }
 }
 
-impl Expr {
-  ///
-  pub fn eval(self, ctx: &mut Context) -> Self {
+impl Evaluate for Expr {
+  fn eval(self, ctx: &mut Context) -> Self {
     match self {
       Self::Error => todo!(),
 
@@ -79,10 +83,9 @@ impl Expr {
   }
 }
 
-impl Num {
-  ///
+impl Evaluate for Num {
   #[inline]
-  pub fn eval(self, _ctx: &mut Context) -> Self {
+  fn eval(self, _ctx: &mut Context) -> Self {
     self
   }
 }
