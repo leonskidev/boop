@@ -20,17 +20,20 @@ You can find the compiled executable in `.../boop/target/release/`.
 **Boop**'s syntax is very simple, it's just maths. Since **Boop** has a REPL,
 let's do a quick calculation and follow what happens:
 
-```py
-# define the variable `a` and set it to `10`
+```rs
+// define the variable `a` and set it to `10`
 => a := 10
   a := 10
-# define the function `square` which takes in the variable `x`;
-# it should square `x`
+// define the function `square` which takes in the variable `x`;
+// it should square `x`
 => square(x) := x * x
   square(x) := x*x
-# then apply the function `square` to the variable `a`
+// then apply the function `square` to the variable `a`
 => square(a)
   100
+// let's do that again, but compare it agains our knowledge
+=> 100 = square(a)
+  100 = 100
 ```
 
 Internally, **Boop** uses a 128-bit fixed-point number split into two 64-bits
