@@ -33,6 +33,8 @@ pub enum Token {
   RightBracket,
   /// The `,` symbol.
   Comma,
+  /// The `=` symbol.
+  Equals,
 }
 
 impl Token {
@@ -59,6 +61,7 @@ impl Token {
       just('(').to(Self::LeftBracket),
       just(')').to(Self::RightBracket),
       just(',').to(Self::Comma),
+      just('=').to(Self::Equals),
     ));
 
     let token = num.or(ident).or(symbol);
@@ -85,6 +88,7 @@ impl fmt::Display for Token {
       Self::LeftBracket => write!(f, "("),
       Self::RightBracket => write!(f, ")"),
       Self::Comma => write!(f, ","),
+      Self::Equals => write!(f, "="),
     }
   }
 }

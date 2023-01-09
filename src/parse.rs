@@ -89,8 +89,7 @@ impl Expr {
         )
         .foldl(|lhs, (op, rhs)| Self::Binary(op, Box::new(lhs), Box::new(rhs)));
 
-      // sum
-      product
+      let sum = product
         .clone()
         .then(
           just(Token::Plus)
@@ -99,6 +98,12 @@ impl Expr {
             .then(product)
             .repeated(),
         )
+        .foldl(|lhs, (op, rhs)| Self::Binary(op, Box::new(lhs), Box::new(rhs)));
+
+      // cmp
+      sum
+        .clone()
+        .then(just(Token::Equals).to(BinOp::Eql).then(sum).repeated())
         .foldl(|lhs, (op, rhs)| Self::Binary(op, Box::new(lhs), Box::new(rhs)))
     })
   }

@@ -38,7 +38,7 @@ pub trait Evaluate {
 impl Evaluate for Stmt {
   fn eval(self, ctx: &mut Evaluator) -> Self {
     match self {
-      Self::Error => todo!(),
+      Self::Error => Self::Error,
 
       Self::Expr(expr) => Self::Expr(expr.eval(ctx)),
 
@@ -60,7 +60,7 @@ impl Evaluate for Stmt {
 impl Evaluate for Expr {
   fn eval(self, ctx: &mut Evaluator) -> Self {
     match self {
-      Self::Error => todo!(),
+      Self::Error => Self::Error,
 
       Self::Num(lit) => Self::Num(lit.eval(ctx)),
       // TODO: handle errors
@@ -94,6 +94,17 @@ impl Evaluate for Expr {
           BinOp::Sub => Expr::Num(lhs - rhs),
           BinOp::Mul => Expr::Num(lhs * rhs),
           BinOp::Div => Expr::Num(lhs / rhs),
+          BinOp::Eql => {
+            if lhs == rhs {
+              Self::Binary(
+                op,
+                Box::new(Expr::Num(lhs)),
+                Box::new(Expr::Num(rhs)),
+              )
+            } else {
+              Self::Error
+            }
+          }
         },
         _ => unimplemented!(),
       },

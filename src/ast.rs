@@ -121,6 +121,8 @@ pub enum BinOp {
   Mul,
   /// The addition (`/`) operator.
   Div,
+  /// The equality (`=`) operator.
+  Eql,
 }
 
 impl fmt::Display for BinOp {
@@ -130,6 +132,7 @@ impl fmt::Display for BinOp {
       Self::Sub => write!(f, "-"),
       Self::Mul => write!(f, "*"),
       Self::Div => write!(f, "/"),
+      Self::Eql => write!(f, "="),
     }
   }
 }
