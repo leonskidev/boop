@@ -1,7 +1,7 @@
 # Boop
 
-**Boop** is the glorified calculator for all your numbery needs. You can either
-use its REPL, or add it to your own project as a library.
+**Boop** is a glorified calculator for all your numbery needs. You can either
+use its CLI, or add it to your own project as a library.
 
 ## Installation
 
