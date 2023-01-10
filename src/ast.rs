@@ -37,13 +37,13 @@ impl fmt::Display for Stmt {
 
       Self::Expr(expr) => write!(f, "{}", expr),
 
-      Self::VarDef { ident, expr } => write!(f, "{} := {}", ident, expr),
+      Self::VarDef { ident, expr } => write!(f, "let {} = {}", ident, expr),
       Self::FnDef { ident, args, body } => {
-        write!(f, "{}(", ident)?;
+        write!(f, "let {}(", ident)?;
         args.iter().enumerate().try_for_each(|(i, ident)| {
           write!(f, "{}{}", if i > 0 { ", " } else { "" }, ident)
         })?;
-        write!(f, ") := {}", body)
+        write!(f, ") = {}", body)
       }
     }
   }
