@@ -17,8 +17,9 @@ pub enum Token {
   /// An identifier: `f`, `hello`.
   Ident(String),
 
-  /// The `:=` symbol.
-  ColonEquals,
+  /// The `let` keyword.
+  Let,
+
   /// The `+` symbol.
   Plus,
   /// The `-` symbol.
@@ -52,8 +53,9 @@ impl Token {
 
     let ident = text::ident().map(Self::Ident);
 
+    let keyword = choice((text::keyword("let").to(Self::Let),));
+
     let symbol = choice((
-      just(":=").to(Self::ColonEquals),
       just('+').to(Self::Plus),
       just('-').to(Self::Minus),
       just('*').to(Self::Asterisk),
@@ -64,7 +66,7 @@ impl Token {
       just('=').to(Self::Equals),
     ));
 
-    let token = num.or(ident).or(symbol);
+    let token = num.or(keyword).or(ident).or(symbol);
 
     token
       .map_with_span(|token, span| (token, span))
@@ -80,7 +82,8 @@ impl fmt::Display for Token {
       Self::Num(a) => write!(f, "{}", a),
       Self::Ident(a) => write!(f, "{}", a),
 
-      Self::ColonEquals => write!(f, ":="),
+      Self::Let => write!(f, "let"),
+
       Self::Plus => write!(f, "+"),
       Self::Minus => write!(f, "-"),
       Self::Asterisk => write!(f, "*"),

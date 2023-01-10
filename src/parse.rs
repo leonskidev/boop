@@ -11,18 +11,20 @@ impl Stmt {
   pub fn parser() -> impl Parser<Token, Self, Error = Simple<Token>> + Clone {
     let ident = select! { Token::Ident(a) => a };
 
-    let var_def = ident
-      .then_ignore(just(Token::ColonEquals))
+    let var_def = just(Token::Let)
+      .ignore_then(ident)
+      .then_ignore(just(Token::Equals))
       .then(Expr::parser())
       .map(|(ident, expr)| Self::VarDef { ident, expr });
 
-    let fn_def = ident
+    let fn_def = just(Token::Let)
+      .ignore_then(ident)
       .then(
         ident
           .separated_by(just(Token::Comma))
           .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
       )
-      .then_ignore(just(Token::ColonEquals))
+      .then_ignore(just(Token::Equals))
       .then(Expr::parser())
       .map(|((ident, args), body)| Self::FnDef { ident, args, body });
 
