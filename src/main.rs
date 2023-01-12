@@ -5,12 +5,12 @@ use std::{
 };
 
 // use ariadne::{Color, Config, Fmt, Label, Report, ReportKind, Source};
-use boop::eval::Evaluator;
+use boop::eval::Context;
 
 fn main() {
   let cli: Cli = clap::Parser::parse();
 
-  let mut ctx = Evaluator::default();
+  let mut ctx = Context::default();
 
   cli
     .libs
@@ -30,9 +30,8 @@ fn main() {
 
   match cli.command {
     Command::Inline { source } => {
-      if let Some(result) = ctx.eval(&source) {
-        println!("{}", result)
-      }
+      let stmt = ctx.eval(&source);
+      println!("{}", ctx.display(&stmt));
     }
     Command::Repl => {
       iter::from_fn(|| {
@@ -42,8 +41,10 @@ fn main() {
       .zip(io::stdin().lines())
       // TODO: handle errors
       .map(|(_, line)| line.unwrap())
-      .filter_map(|s| ctx.eval(&s))
-      .for_each(|result| println!("{}", result));
+      .for_each(|source| {
+        let stmt = ctx.eval(&source);
+        println!("{}", ctx.display(&stmt))
+      });
     }
   }
 }

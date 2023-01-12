@@ -1,24 +1,82 @@
 //! Contains the lexer.
 
-use core::{fmt, ops::Range};
+use chumsky::zero_copy::{error::Error, prelude::*};
+use fixed::{types::extra::U64, FixedI128};
+use lasso::{Rodeo, Spur};
 
-use chumsky::prelude::*;
-use fixed::types::extra::U64;
-use fixed::FixedI128;
+/// The state provided to a [`lexer`].
+pub type State = Rodeo<Spur>;
 
-/// Represents a span within a source.
-pub type Span = Range<usize>;
+/// Creates a lexer.
+pub fn lexer<'a, E>() -> impl Parser<'a, str, Vec<Token>, E, State>
+where
+  E: 'a + Error<str>,
+{
+  let real = text::int::<_, _, E, _>(10)
+    .then(just('.').ignore_then(text::digits(10)).or_not())
+    .map(|(lhs, rhs)| {
+      let mut real = lhs.to_string();
+      if let Some(rhs) = rhs {
+        real.push('.');
+        real.push_str(rhs);
+      }
+      real
+    })
+    .from_str()
+    // TODO: handle errors
+    .unwrapped()
+    .map(Token::Real);
 
-/// Represents a valid source token.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+  let ident = text::ident::<_, _, _, State>()
+    .map_with_state(|s, _, state| state.get_or_intern(s))
+    .map(Token::Ident);
+
+  let keyword = text::keyword("let").to(Token::Let);
+
+  let symbol = choice((
+    just("->").to(Token::RightArrow),
+    just("!=").to(Token::ExclamationEquals),
+    just("<=").to(Token::LeftAngleBracketEquals),
+    just(">=").to(Token::RightAngleBracketEquals),
+    //
+    just('+').to(Token::Plus),
+    just('-').to(Token::Minus),
+    just('*').to(Token::Asterisk),
+    just('/').to(Token::Slash),
+    just('^').to(Token::Circumflex),
+    just(',').to(Token::Comma),
+    just('=').to(Token::Equals),
+    //
+    just('(').to(Token::LeftBracket),
+    just(')').to(Token::RightBracket),
+    just('<').to(Token::LeftAngleBracket),
+    just('>').to(Token::RightAngleBracket),
+  ));
+
+  let token = real.or(keyword).or(ident).or(symbol);
+
+  token.padded().repeated().collect().then_ignore(end())
+}
+
+/// Represents a source code token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Token {
-  /// A number literal: `123`, `1.5`.
-  Num(FixedI128<U64>),
-  /// An identifier: `f`, `hello`.
-  Ident(String),
+  /// A real number.
+  Real(Real),
+  /// An identifier.
+  Ident(Ident),
 
   /// The `let` keyword.
   Let,
+
+  /// The `->` symbol.
+  RightArrow,
+  /// The `!=` symbol.
+  ExclamationEquals,
+  /// The `<=` symbol.
+  LeftAngleBracketEquals,
+  /// The `>=` symbol.
+  RightAngleBracketEquals,
 
   /// The `+` symbol.
   Plus,
@@ -28,70 +86,25 @@ pub enum Token {
   Asterisk,
   /// The `/` symbol.
   Slash,
-  /// The `(` symbol.
-  LeftBracket,
-  /// The `)` symbol.
-  RightBracket,
+  /// The `^` symbol.
+  Circumflex,
   /// The `,` symbol.
   Comma,
   /// The `=` symbol.
   Equals,
+
+  /// The `(` symbol.
+  LeftBracket,
+  /// The `)` symbol.
+  RightBracket,
+  /// The `<` symbol.
+  LeftAngleBracket,
+  /// The `>` symbol.
+  RightAngleBracket,
 }
 
-impl Token {
-  /// Creates a [`Token`] lexer.
-  pub fn lexer(
-  ) -> impl Parser<char, Vec<(Self, Span)>, Error = Simple<char>> + Clone {
-    let num = text::int(10)
-      .chain::<char, _, _>(just('.').chain(text::digits(10)).or_not().flatten())
-      .collect::<String>()
-      .try_map(|s, span| {
-        s.parse()
-          .map_err(|e| Simple::custom(span, format!("{}", e)))
-      })
-      .map(Self::Num);
+/// Represents a real number.
+pub type Real = FixedI128<U64>;
 
-    let ident = text::ident().map(Self::Ident);
-
-    let keyword = choice((text::keyword("let").to(Self::Let),));
-
-    let symbol = choice((
-      just('+').to(Self::Plus),
-      just('-').to(Self::Minus),
-      just('*').to(Self::Asterisk),
-      just('/').to(Self::Slash),
-      just('(').to(Self::LeftBracket),
-      just(')').to(Self::RightBracket),
-      just(',').to(Self::Comma),
-      just('=').to(Self::Equals),
-    ));
-
-    let token = num.or(keyword).or(ident).or(symbol);
-
-    token
-      .map_with_span(|token, span| (token, span))
-      .padded()
-      .repeated()
-      .then_ignore(end().recover_with(skip_then_retry_until([])))
-  }
-}
-
-impl fmt::Display for Token {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Num(a) => write!(f, "{}", a),
-      Self::Ident(a) => write!(f, "{}", a),
-
-      Self::Let => write!(f, "let"),
-
-      Self::Plus => write!(f, "+"),
-      Self::Minus => write!(f, "-"),
-      Self::Asterisk => write!(f, "*"),
-      Self::Slash => write!(f, "/"),
-      Self::LeftBracket => write!(f, "("),
-      Self::RightBracket => write!(f, ")"),
-      Self::Comma => write!(f, ","),
-      Self::Equals => write!(f, "="),
-    }
-  }
-}
+/// Represents an identifier.
+pub type Ident = Spur;

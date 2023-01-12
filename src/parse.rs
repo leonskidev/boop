@@ -1,112 +1,246 @@
 //! Contains the parser.
 
-// TODO: add spans to return types
+use chumsky::zero_copy::{error::Error, prelude::*};
+use core::fmt;
 
-use chumsky::prelude::*;
+use crate::lex::*;
 
-use crate::{ast::*, lex::*};
+/// Creates a parser.
+pub fn parser<'a, E>() -> impl Parser<'a, [Token], Stmt, E>
+where
+  E: 'a + Error<[Token]>,
+{
+  let ident =
+    any()
+      .filter(|token| matches!(token, Token::Ident(_)))
+      .map(|token| match token {
+        Token::Ident(a) => a,
+        _ => unreachable!(),
+      });
 
-impl Stmt {
-  /// Creates a [`Stmt`] parser.
-  pub fn parser() -> impl Parser<Token, Self, Error = Simple<Token>> + Clone {
-    let ident = select! { Token::Ident(a) => a };
+  let expr = recursive(|expr| {
+    let real =
+      any()
+        .filter(|token| matches!(token, Token::Real(_)))
+        .map(|token| match token {
+          Token::Real(a) => Lit::Real(a),
+          _ => unreachable!(),
+        });
 
-    let var_def = just(Token::Let)
+    let r#fn = ident
+      .separated_by(just(Token::Comma))
+      .collect()
+      .delimited_by(just(Token::LeftBracket), just(Token::RightBracket))
+      .then_ignore(just(Token::RightArrow))
+      .then(expr.clone())
+      .map(|(args, body)| Lit::Fn(args, Box::new(body)));
+
+    let lit = real.or(r#fn).map(Expr::Lit);
+
+    let atom = lit.or(ident.map(Expr::Var)).or(
+      expr
+        .clone()
+        .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
+    );
+
+    let call = atom
+      .then(
+        expr
+          .separated_by(just(Token::Comma))
+          .collect()
+          .delimited_by(just(Token::LeftBracket), just(Token::RightBracket))
+          .repeated()
+          .collect::<Vec<_>>(),
+      )
+      .foldl(|lhs, args| Expr::Call(Box::new(lhs), args));
+
+    let unary = just(Token::Minus)
+      .to(UnOp::Neg)
+      .repeated()
+      .collect::<Vec<_>>()
+      .then(call)
+      .foldr(|op, rhs| Expr::Unary(op, Box::new(rhs)));
+
+    let order = unary
+      .clone()
+      .then(
+        just(Token::Circumflex)
+          .to(BinOp::Pow)
+          .then(unary)
+          .repeated()
+          .collect::<Vec<_>>(),
+      )
+      .foldl(|lhs, (op, rhs)| Expr::Binary(op, Box::new(lhs), Box::new(rhs)));
+
+    let product = order
+      .clone()
+      .then(
+        just(Token::Asterisk)
+          .to(BinOp::Mul)
+          .or(just(Token::Slash).to(BinOp::Div))
+          .then(order)
+          .repeated()
+          .collect::<Vec<_>>(),
+      )
+      .foldl(|lhs, (op, rhs)| Expr::Binary(op, Box::new(lhs), Box::new(rhs)));
+
+    let sum = product
+      .clone()
+      .then(
+        just(Token::Plus)
+          .to(BinOp::Add)
+          .or(just(Token::Minus).to(BinOp::Sub))
+          .then(product)
+          .repeated()
+          .collect::<Vec<_>>(),
+      )
+      .foldl(|lhs, (op, rhs)| Expr::Binary(op, Box::new(lhs), Box::new(rhs)));
+
+    let compare = sum
+      .clone()
+      .then(
+        just(Token::Equals)
+          .to(BinOp::Eq)
+          .or(just(Token::ExclamationEquals).to(BinOp::Ne))
+          .or(just(Token::LeftAngleBracket).to(BinOp::Lt))
+          .or(just(Token::RightAngleBracket).to(BinOp::Gt))
+          .or(just(Token::LeftAngleBracketEquals).to(BinOp::Le))
+          .or(just(Token::RightAngleBracketEquals).to(BinOp::Ge))
+          .then(sum)
+          .repeated()
+          .collect::<Vec<_>>(),
+      )
+      .foldl(|lhs, (op, rhs)| Expr::Binary(op, Box::new(lhs), Box::new(rhs)));
+
+    #[allow(clippy::let_and_return)]
+    compare
+  });
+
+  let def = {
+    let var = just(Token::Let)
       .ignore_then(ident)
       .then_ignore(just(Token::Equals))
-      .then(Expr::parser())
-      .map(|(ident, expr)| Self::VarDef { ident, expr });
+      .then(expr.clone())
+      .map(|(ident, body)| Stmt::Def(ident, body));
 
-    let fn_def = just(Token::Let)
+    let r#fn = just(Token::Let)
       .ignore_then(ident)
       .then(
         ident
           .separated_by(just(Token::Comma))
+          .collect()
           .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
       )
       .then_ignore(just(Token::Equals))
-      .then(Expr::parser())
-      .map(|((ident, args), body)| Self::FnDef { ident, args, body });
+      .then(expr.clone())
+      .map(|((ident, args), body)| {
+        Stmt::Def(ident, Expr::Lit(Lit::Fn(args, Box::new(body))))
+      });
 
-    fn_def
-      .or(var_def)
-      .or(Expr::parser().map(Self::Expr))
-      .recover_with(nested_delimiters(
-        Token::LeftBracket,
-        Token::RightBracket,
-        [],
-        |_| Self::Error,
-      ))
-      .then_ignore(end().recover_with(skip_then_retry_until([])))
+    r#fn.or(var)
+  };
+
+  let stmt = def.or(expr.map(Stmt::Expr));
+
+  stmt.then_ignore(end())
+}
+
+/// Represents a statement.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Stmt {
+  /// An expression.
+  Expr(Expr),
+
+  /// A definition.
+  Def(Ident, Expr),
+}
+
+/// Represents an expression.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Expr {
+  /// A literal.
+  Lit(Lit),
+
+  /// A variable reference.
+  Var(Ident),
+  /// A function call.
+  Call(Box<Self>, Vec<Self>),
+
+  /// A unary operation.
+  Unary(UnOp, Box<Self>),
+  /// A binary operation.
+  Binary(BinOp, Box<Self>, Box<Self>),
+}
+
+/// Represents a literal.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Lit {
+  /// A real number.
+  Real(Real),
+  /// An arrow function.
+  Fn(Vec<Ident>, Box<Expr>),
+}
+
+/// Represents a unary operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UnOp {
+  /// A negation.
+  Neg,
+}
+
+impl fmt::Display for UnOp {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let s = match self {
+      Self::Neg => "-",
+    };
+    write!(f, "{}", s)
   }
 }
 
-impl Expr {
-  /// Creates a [`Expr`] parser.
-  pub fn parser() -> impl Parser<Token, Self, Error = Simple<Token>> + Clone {
-    recursive(|expr| {
-      let ident = select! { Token::Ident(a) => a };
+/// Represents a binary operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BinOp {
+  /// The addition operator.
+  Add,
+  /// The subtraction operator.
+  Sub,
+  /// The multiplication operator.
+  Mul,
+  /// The division operator.
+  Div,
+  /// The power operator.
+  Pow,
 
-      let num = select! { Token::Num(a) => Self::Num(a) };
+  /// The equality operator.
+  Eq,
+  /// The inequality operator.
+  Ne,
+  /// The less than operator.
+  Lt,
+  /// The greater than operator.
+  Gt,
+  /// The less than or equals operator.
+  Le,
+  /// The greater than or equals operator.
+  Ge,
+}
 
-      let var = ident.map(Self::Var);
+impl fmt::Display for BinOp {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let s = match self {
+      Self::Add => "+",
+      Self::Sub => "-",
+      Self::Mul => "*",
+      Self::Div => "/",
+      Self::Pow => "^",
 
-      let r#fn = ident
-        .then(
-          expr
-            .clone()
-            .separated_by(just(Token::Comma))
-            .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
-        )
-        .map(|(ident, args)| Self::Fn(ident, args));
-
-      let atom = num
-        .or(r#fn)
-        .or(var)
-        .or(
-          expr
-            .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
-        )
-        .recover_with(nested_delimiters(
-          Token::LeftBracket,
-          Token::RightBracket,
-          [],
-          |_| Self::Error,
-        ));
-
-      let unary = just(Token::Minus)
-        .to(UnOp::Neg)
-        .repeated()
-        .then(atom)
-        .foldr(|op, rhs| Expr::Unary(op, Box::new(rhs)));
-
-      let product = unary
-        .clone()
-        .then(
-          just(Token::Asterisk)
-            .to(BinOp::Mul)
-            .or(just(Token::Slash).to(BinOp::Div))
-            .then(unary)
-            .repeated(),
-        )
-        .foldl(|lhs, (op, rhs)| Self::Binary(op, Box::new(lhs), Box::new(rhs)));
-
-      let sum = product
-        .clone()
-        .then(
-          just(Token::Plus)
-            .to(BinOp::Add)
-            .or(just(Token::Minus).to(BinOp::Sub))
-            .then(product)
-            .repeated(),
-        )
-        .foldl(|lhs, (op, rhs)| Self::Binary(op, Box::new(lhs), Box::new(rhs)));
-
-      // cmp
-      sum
-        .clone()
-        .then(just(Token::Equals).to(BinOp::Eql).then(sum).repeated())
-        .foldl(|lhs, (op, rhs)| Self::Binary(op, Box::new(lhs), Box::new(rhs)))
-    })
+      Self::Eq => "=",
+      Self::Ne => "!=",
+      Self::Lt => ">",
+      Self::Gt => ">",
+      Self::Le => "<=",
+      Self::Ge => ">=",
+    };
+    write!(f, "{}", s)
   }
 }
