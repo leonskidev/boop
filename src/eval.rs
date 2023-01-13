@@ -88,6 +88,7 @@ impl<I: Interner> Engine<I> {
 
             self.eval_expr_with_scope(&mut fn_scope, *body)
           }
+          // TODO: can we move this to the parsing step somehow?
           Expr::Real(lhs) if exprs.len() == 1 => {
             let rhs = self.eval_expr_with_scope(scope, exprs.pop().unwrap());
             self.eval_expr_with_scope(
