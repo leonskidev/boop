@@ -20,18 +20,10 @@ fn main() {
   }
 }
 
-#[derive(Debug, clap::Parser)]
-#[command(author, version, about, long_about = None)]
-struct Cli {
-  #[command(subcommand)]
-  command: Command,
-}
-
 fn eval(engine: &mut Engine<Rodeo>, scope: &mut Scope, input: &str) {
   let expr = engine
     .eval_with_scope::<Rich<_>, Rich<_>>(scope, input)
     // TODO: handle errors
-    .unwrap()
     .unwrap();
 
   println!("{}", Formatter::new(engine, &expr));
@@ -54,6 +46,13 @@ fn repl(engine: &mut Engine<Rodeo>, scope: &mut Scope) {
       }
     }
   }
+}
+
+#[derive(Debug, clap::Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+  #[command(subcommand)]
+  command: Command,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, clap::Subcommand)]
