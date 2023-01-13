@@ -1,47 +1,58 @@
 //! Contains the parser.
 
+use core::hint::unreachable_unchecked;
+
 use chumsky::zero_copy::{error::Error, prelude::*};
 use core::fmt;
 
 use crate::lex::*;
 
 /// Creates a parser.
-pub fn parser<'a, E>() -> impl Parser<'a, [Token], Stmt, E>
+pub fn parser<'a, E>() -> impl Parser<'a, [Token], Expr, E>
 where
   E: 'a + Error<[Token]>,
 {
-  let ident =
+  let real =
     any()
-      .filter(|token| matches!(token, Token::Ident(_)))
+      .filter(|token| matches!(token, Token::Real(_)))
       .map(|token| match token {
-        Token::Ident(a) => a,
-        _ => unreachable!(),
+        Token::Real(a) => a,
+        _ => unsafe { unreachable_unchecked() },
+      });
+
+  let symbol =
+    any()
+      .filter(|token| matches!(token, Token::Symbol(_)))
+      .map(|token| match token {
+        Token::Symbol(a) => a,
+        _ => unsafe { unreachable_unchecked() },
       });
 
   let expr = recursive(|expr| {
-    let real =
-      any()
-        .filter(|token| matches!(token, Token::Real(_)))
-        .map(|token| match token {
-          Token::Real(a) => Lit::Real(a),
-          _ => unreachable!(),
-        });
+    let var = symbol.map(Expr::Var);
 
-    let r#fn = ident
-      .separated_by(just(Token::Comma))
-      .collect()
-      .delimited_by(just(Token::LeftBracket), just(Token::RightBracket))
+    let r#fn = symbol
+      .map(|symbol| vec![symbol])
+      .or(
+        symbol
+          .separated_by(just(Token::Comma))
+          .collect()
+          .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
+      )
       .then_ignore(just(Token::RightArrow))
       .then(expr.clone())
-      .map(|(args, body)| Lit::Fn(args, Box::new(body)));
+      .map(|(symbols, body)| Expr::Fn(symbols, Box::new(body)));
 
-    let lit = real.or(r#fn).map(Expr::Lit);
-
-    let atom = lit.or(ident.map(Expr::Var)).or(
-      expr
-        .clone()
-        .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
-    );
+    let atom = real
+      // TODO: remove this when the formatting stops being so weird
+      .map(Expr::Real)
+      .or(r#fn)
+      .or(var)
+      .or(
+        expr
+          .clone()
+          .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
+      );
 
     let call = atom
       .then(
@@ -52,7 +63,7 @@ where
           .repeated()
           .collect::<Vec<_>>(),
       )
-      .foldl(|lhs, args| Expr::Call(Box::new(lhs), args));
+      .foldl(|r#fn, exprs| Expr::Call(Box::new(r#fn), exprs));
 
     let unary = just(Token::Minus)
       .to(UnOp::Neg)
@@ -61,24 +72,13 @@ where
       .then(call)
       .foldr(|op, rhs| Expr::Unary(op, Box::new(rhs)));
 
-    let order = unary
-      .clone()
-      .then(
-        just(Token::Circumflex)
-          .to(BinOp::Pow)
-          .then(unary)
-          .repeated()
-          .collect::<Vec<_>>(),
-      )
-      .foldl(|lhs, (op, rhs)| Expr::Binary(op, Box::new(lhs), Box::new(rhs)));
-
-    let product = order
+    let product = unary
       .clone()
       .then(
         just(Token::Asterisk)
           .to(BinOp::Mul)
           .or(just(Token::Slash).to(BinOp::Div))
-          .then(order)
+          .then(unary)
           .repeated()
           .collect::<Vec<_>>(),
       )
@@ -96,7 +96,7 @@ where
       )
       .foldl(|lhs, (op, rhs)| Expr::Binary(op, Box::new(lhs), Box::new(rhs)));
 
-    let compare = sum
+    let comapre = sum
       .clone()
       .then(
         just(Token::Equals)
@@ -113,56 +113,28 @@ where
       .foldl(|lhs, (op, rhs)| Expr::Binary(op, Box::new(lhs), Box::new(rhs)));
 
     #[allow(clippy::let_and_return)]
-    compare
+    comapre
   });
 
-  let def = {
-    let var = just(Token::Let)
-      .ignore_then(ident)
-      .then_ignore(just(Token::Equals))
-      .then(expr.clone())
-      .map(|(ident, body)| Stmt::Def(ident, body));
+  let r#let = just(Token::Let)
+    .ignore_then(symbol)
+    .then_ignore(just(Token::Equals))
+    .then(expr.clone())
+    .map(|(symbol, body)| Expr::Let(symbol, Box::new(body)));
 
-    let r#fn = just(Token::Let)
-      .ignore_then(ident)
-      .then(
-        ident
-          .separated_by(just(Token::Comma))
-          .collect()
-          .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
-      )
-      .then_ignore(just(Token::Equals))
-      .then(expr.clone())
-      .map(|((ident, args), body)| {
-        Stmt::Def(ident, Expr::Lit(Lit::Fn(args, Box::new(body))))
-      });
-
-    r#fn.or(var)
-  };
-
-  let stmt = def.or(expr.map(Stmt::Expr));
-
-  stmt.then_ignore(end())
-}
-
-/// Represents a statement.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Stmt {
-  /// An expression.
-  Expr(Expr),
-
-  /// A definition.
-  Def(Ident, Expr),
+  r#let.or(expr).then_ignore(end())
 }
 
 /// Represents an expression.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
-  /// A literal.
-  Lit(Lit),
+  /// A real number.
+  Real(Real),
+  /// A variable.
+  Var(Symbol),
+  /// A function.
+  Fn(Vec<Symbol>, Box<Self>),
 
-  /// A variable reference.
-  Var(Ident),
   /// A function call.
   Call(Box<Self>, Vec<Self>),
 
@@ -170,77 +142,66 @@ pub enum Expr {
   Unary(UnOp, Box<Self>),
   /// A binary operation.
   Binary(BinOp, Box<Self>, Box<Self>),
-}
 
-/// Represents a literal.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Lit {
-  /// A real number.
-  Real(Real),
-  /// An arrow function.
-  Fn(Vec<Ident>, Box<Expr>),
+  /// A let definition.
+  Let(Symbol, Box<Self>),
 }
 
 /// Represents a unary operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnOp {
-  /// A negation.
+  /// Negation.
   Neg,
 }
 
 impl fmt::Display for UnOp {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let s = match self {
-      Self::Neg => "-",
-    };
-    write!(f, "{}", s)
+    match self {
+      Self::Neg => write!(f, "-"),
+    }
   }
 }
 
 /// Represents a binary operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinOp {
-  /// The addition operator.
+  /// Addition.
   Add,
-  /// The subtraction operator.
+  /// Subtraction.
   Sub,
-  /// The multiplication operator.
+  /// Multiplication.
   Mul,
-  /// The division operator.
+  /// Division.
   Div,
-  /// The power operator.
-  Pow,
 
-  /// The equality operator.
+  /// Equals.
   Eq,
-  /// The inequality operator.
+  /// Not equals.
   Ne,
-  /// The less than operator.
+  /// Less than.
   Lt,
-  /// The greater than operator.
+  /// Greater than.
   Gt,
-  /// The less than or equals operator.
+  /// Less than or equals.
   Le,
-  /// The greater than or equals operator.
+  /// Greater than or equals.
   Ge,
 }
 
 impl fmt::Display for BinOp {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let s = match self {
-      Self::Add => "+",
-      Self::Sub => "-",
-      Self::Mul => "*",
-      Self::Div => "/",
-      Self::Pow => "^",
+    match self {
+      Self::Add => write!(f, "+"),
+      Self::Sub => write!(f, "-"),
+      Self::Mul => write!(f, "*"),
+      Self::Div => write!(f, "/"),
 
-      Self::Eq => "=",
-      Self::Ne => "!=",
-      Self::Lt => ">",
-      Self::Gt => ">",
-      Self::Le => "<=",
-      Self::Ge => ">=",
-    };
-    write!(f, "{}", s)
+      Self::Eq => write!(f, "="),
+      Self::Ne => write!(f, "!="),
+      Self::Lt => write!(f, "<"),
+      Self::Gt => write!(f, ">"),
+      Self::Le => write!(f, "<="),
+      Self::Ge => write!(f, ">="),
+    }
   }
 }

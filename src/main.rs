@@ -1,51 +1,22 @@
-use core::iter;
-use std::{
-  io::{self, Write},
-  path::PathBuf,
+use boop::{
+  eval::{Engine, Scope},
+  fmt::Formatter,
 };
-
-// use ariadne::{Color, Config, Fmt, Label, Report, ReportKind, Source};
-use boop::eval::Context;
+use chumsky::zero_copy::error::Rich;
+use clap::Parser;
+use lasso::Rodeo;
+use reedline::{Prompt, Reedline, Signal};
+use std::borrow::Cow;
 
 fn main() {
-  let cli: Cli = clap::Parser::parse();
+  let mut engine = Engine::default();
+  let mut scope = Scope::default();
 
-  let mut ctx = Context::default();
-
-  cli
-    .libs
-    .into_iter()
-    .filter_map(|path| match std::fs::read_to_string(path) {
-      Ok(source) => Some(source),
-      Err(err) => {
-        eprintln!("WARN: {}", err);
-        None
-      }
-    })
-    .for_each(|source| {
-      source.lines().for_each(|s| {
-        ctx.eval(s);
-      });
-    });
+  let cli = Cli::parse();
 
   match cli.command {
-    Command::Inline { source } => {
-      let stmt = ctx.eval(&source);
-      println!("{}", ctx.display(&stmt));
-    }
-    Command::Repl => {
-      iter::from_fn(|| {
-        print!("=> ");
-        io::stdout().flush().ok()
-      })
-      .zip(io::stdin().lines())
-      // TODO: handle errors
-      .map(|(_, line)| line.unwrap())
-      .for_each(|source| {
-        let stmt = ctx.eval(&source);
-        println!("{}", ctx.display(&stmt))
-      });
-    }
+    Command::Inline { input } => eval(&mut engine, &mut scope, &input),
+    Command::Repl => repl(&mut engine, &mut scope),
   }
 }
 
@@ -54,24 +25,80 @@ fn main() {
 struct Cli {
   #[command(subcommand)]
   command: Command,
+}
 
-  // /// Whether to disable the standard library.
-  // #[arg(short, long)]
-  // no_std: bool,
-  /// List of library files to import.
-  #[arg(short, long)]
-  libs: Vec<PathBuf>,
+fn eval(engine: &mut Engine<Rodeo>, scope: &mut Scope, input: &str) {
+  let expr = engine
+    .eval_with_scope::<Rich<_>, Rich<_>>(scope, input)
+    // TODO: handle errors
+    .unwrap()
+    .unwrap();
+
+  println!("{}", Formatter::new(engine, &expr));
+}
+
+fn repl(engine: &mut Engine<Rodeo>, scope: &mut Scope) {
+  let mut line_editor = Reedline::create();
+  let prompt = ReplPrompt::default();
+
+  loop {
+    match line_editor.read_line(&prompt) {
+      Ok(Signal::Success(input)) => eval(engine, scope, &input),
+      Ok(Signal::CtrlC) | Ok(Signal::CtrlD) => {
+        println!("Aborted!");
+        break;
+      }
+      event => {
+        eprintln!("Unknown REPL event: {:?}", event);
+        break;
+      }
+    }
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, clap::Subcommand)]
 enum Command {
   /// Evaluates the provided string [alias: `=`].
   #[command(alias = "=")]
-  Inline { source: String },
+  Inline { input: String },
   /// Starts the interactive REPL [alias: `>`].
   #[command(alias = ">")]
   Repl,
 }
+
+#[derive(Default)]
+struct ReplPrompt;
+
+impl Prompt for ReplPrompt {
+  #[inline]
+  fn render_prompt_left(&self) -> std::borrow::Cow<str> {
+    Cow::Owned("=> ".to_string())
+  }
+
+  #[inline]
+  fn render_prompt_right(&self) -> std::borrow::Cow<str> {
+    Cow::Owned("".to_string())
+  }
+
+  #[inline]
+  fn render_prompt_indicator(&self, _: reedline::PromptEditMode) -> Cow<str> {
+    Cow::Owned("".to_string())
+  }
+
+  #[inline]
+  fn render_prompt_multiline_indicator(&self) -> Cow<str> {
+    Cow::Owned("".to_string())
+  }
+
+  fn render_prompt_history_search_indicator(
+    &self,
+    _: reedline::PromptHistorySearch,
+  ) -> Cow<str> {
+    Cow::Owned("".to_string())
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 // fn handle_errors(source: String, errs: Vec<chumsky::error::Simple<char>>) {
 //   errs

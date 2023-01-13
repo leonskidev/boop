@@ -1,289 +1,310 @@
-//! Contains the [`eval`].
+//! Contains the evaluator.
 
 use std::collections::HashMap;
 
-use chumsky::zero_copy::{prelude::Rich, Parser};
-use lasso::{Interner, Rodeo, Spur};
+use chumsky::zero_copy::{error::Error, Parser};
+use lasso::Interner;
 
-use crate::{
-  lex::{self, *},
-  parse::{self, *},
-};
+use crate::lex::{self, Symbol, Token};
+use crate::parse::{self, BinOp, Expr, UnOp};
 
-/// An evaluation context.
-#[derive(Debug, PartialEq, Eq, Default)]
-pub struct Context {
-  interner: Rodeo<Spur>,
-  defs: HashMap<Ident, Expr>,
+/// An evaluation engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Engine<I: Interner> {
+  interner: I,
 }
 
-impl Context {
-  /// Evaluates a statement.
-  pub fn eval(&mut self, source: &str) -> Stmt {
-    let stmt = lex::lexer::<Rich<_>>()
-      .parse_with_state(source, &mut self.interner)
-      .into_result()
-      .map(|tokens| parse::parser::<Rich<_>>().parse(&tokens).into_result())
-      // TODO: handle errors
-      .unwrap()
-      .unwrap();
-
-    stmt.eval(&mut self.defs)
+impl<I: Interner> Engine<I> {
+  /// Creates a new [`Engine`].
+  #[inline]
+  pub const fn new(interner: I) -> Self {
+    Self { interner }
   }
 
-  /// Returns a pretty string for a statement.
-  pub fn display(&self, stmt: &Stmt) -> String {
-    display_stmt(stmt, &self.interner)
+  /// Returns a reference to the engine interner.
+  #[inline]
+  pub const fn interner(&self) -> &I {
+    &self.interner
   }
-}
 
-/// Implemented by evaluatable types.
-pub trait Evaluate {
-  /// Evaluates a type into its simplest form.
-  fn eval(self, defs: &mut HashMap<Ident, Expr>) -> Self;
-}
-
-impl Evaluate for Stmt {
-  fn eval(self, defs: &mut HashMap<Ident, Expr>) -> Self {
-    match self {
-      Self::Expr(expr) => Self::Expr(expr.eval(defs)),
-
-      Self::Def(ident, body) => {
-        defs.insert(ident, body.clone());
-        Self::Def(ident, body)
-      }
-    }
+  /// Returns a mutable reference to the engine interner.
+  #[inline]
+  // TODO: make this const when it stablised
+  pub fn interner_mut(&mut self) -> &mut I {
+    &mut self.interner
   }
-}
 
-impl Evaluate for Expr {
-  fn eval(self, defs: &mut HashMap<Ident, Expr>) -> Self {
-    match self {
-      Self::Lit(lit) => Self::Lit(lit.eval(defs)),
-
-      // TODO: handle errors
-      Self::Var(ident) => defs.get(&ident).cloned().unwrap(),
-      Self::Call(lhs, args) => match *lhs {
-        Self::Lit(Lit::Fn(fn_args, body)) => {
-          let mut scope = defs.clone();
-
-          for (ident, expr) in fn_args.into_iter().zip(args.into_iter()) {
-            let expr = expr.eval(defs);
-            scope.insert(ident, expr);
-          }
-
-          body.eval(&mut scope)
-        }
-        _ => Self::Call(Box::new(lhs.eval(defs)), args).eval(defs),
-      },
-
-      Self::Unary(op, rhs) => match rhs.eval(defs) {
-        Expr::Lit(Lit::Real(rhs)) => match op {
-          UnOp::Neg => Expr::Lit(Lit::Real(-rhs)),
-        },
-        // TODO: handle errors
-        _ => unimplemented!(),
-      },
-      Self::Binary(op, lhs, rhs) => match (lhs.eval(defs), rhs.eval(defs)) {
-        (Expr::Lit(Lit::Real(lhs)), Expr::Lit(Lit::Real(rhs))) => {
-          match op {
-            BinOp::Add => Expr::Lit(Lit::Real(lhs + rhs)),
-            BinOp::Sub => Expr::Lit(Lit::Real(lhs - rhs)),
-            BinOp::Mul => Expr::Lit(Lit::Real(lhs * rhs)),
-            BinOp::Div => Expr::Lit(Lit::Real(lhs / rhs)),
-            BinOp::Pow => Expr::Lit(Lit::Real({
-              if rhs.frac().is_zero() {
-                let mut tmp = lhs;
-                for _ in 0..rhs.int().to_num::<u64>() - 1 {
-                  tmp *= lhs;
-                }
-                tmp
-              } else {
-                // TODO: handle errors
-                unimplemented!()
-              }
-            })),
-
-            BinOp::Eq => {
-              if lhs == rhs {
-                Self::Binary(
-                  op,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              } else {
-                Self::Binary(
-                  BinOp::Ne,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              }
-            }
-            BinOp::Ne => {
-              if lhs != rhs {
-                Self::Binary(
-                  op,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              } else {
-                Self::Binary(
-                  BinOp::Eq,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              }
-            }
-            BinOp::Lt => {
-              if lhs < rhs {
-                Self::Binary(
-                  op,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              } else {
-                Self::Binary(
-                  BinOp::Ge,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              }
-            }
-            BinOp::Gt => {
-              if lhs > rhs {
-                Self::Binary(
-                  op,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              } else {
-                Self::Binary(
-                  BinOp::Le,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              }
-            }
-            BinOp::Le => {
-              if lhs <= rhs {
-                Self::Binary(
-                  op,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              } else {
-                Self::Binary(
-                  BinOp::Gt,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              }
-            }
-            BinOp::Ge => {
-              if lhs >= rhs {
-                Self::Binary(
-                  op,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              } else {
-                Self::Binary(
-                  BinOp::Lt,
-                  Box::new(Expr::Lit(Lit::Real(lhs))),
-                  Box::new(Expr::Lit(Lit::Real(rhs))),
-                )
-              }
-            }
-          }
-        }
-        // TODO: handle errors
-        _ => unimplemented!(),
-      },
-    }
+  /// Evaluate a <code>&[str](primitive@str)</code>.
+  #[inline]
+  pub fn eval<LE, PE>(
+    &mut self,
+    input: &str,
+  ) -> CompileResult<EvalResult<Expr>, LE, PE>
+  where
+    LE: Error<str>,
+    PE: Error<[Token]>,
+  {
+    self.eval_with_scope::<LE, PE>(&mut Scope::default(), input)
   }
-}
 
-impl Evaluate for Lit {
-  fn eval(self, _defs: &mut HashMap<Ident, Expr>) -> Self {
-    match self {
-      Self::Real(_) | Self::Fn(_, _) => self,
-    }
+  /// Evaluate a <code>&[str](primitive@str)</code> with the provided [`Scope`].
+  #[inline]
+  pub fn eval_with_scope<LE, PE>(
+    &mut self,
+    scope: &mut Scope,
+    input: &str,
+  ) -> CompileResult<EvalResult<Expr>, LE, PE>
+  where
+    LE: Error<str>,
+    PE: Error<[Token]>,
+  {
+    let expr = self.compile::<LE, PE>(input)?;
+    Ok(self.eval_expr_with_scope(scope, expr))
   }
-}
 
-/// Creates a pretty string for a statement.
-pub fn display_stmt(stmt: &Stmt, interner: &impl Interner<Ident>) -> String {
-  match stmt {
-    Stmt::Expr(expr) => display_expr(expr, interner),
+  /// Evaluate an [`Expr`].
+  #[inline]
+  pub fn eval_expr(&self, expr: Expr) -> EvalResult<Expr> {
+    self.eval_expr_with_scope(&mut Scope::default(), expr)
+  }
 
-    Stmt::Def(ident, body) => match body {
-      Expr::Lit(Lit::Fn(args, body)) => {
-        let args = args
-          .iter()
-          .map(|arg| interner.resolve(arg))
-          .enumerate()
-          .fold(String::new(), |mut acc, (i, arg)| {
-            acc.push_str(&format!("{}{}", if i > 0 { ", " } else { "" }, arg));
-            acc
-          });
-        format!(
-          "let {}({}) = {}",
-          interner.resolve(ident),
-          args,
-          display_expr(body, interner)
-        )
-      }
-      _ => format!(
-        "let {} = {}",
-        interner.resolve(ident),
-        display_expr(body, interner)
+  /// Evaluate an [`Expr`] with the provided [`Scope`].
+  pub fn eval_expr_with_scope(
+    &self,
+    scope: &mut Scope,
+    expr: Expr,
+  ) -> EvalResult<Expr> {
+    match expr {
+      Expr::Real(_) | Expr::Fn(_, _) => Ok(expr),
+      Expr::Var(symbol) => Ok(
+        scope
+          .vars()
+          .get(&symbol)
+          .cloned()
+          .unwrap_or(Expr::Var(symbol)),
       ),
-    },
+
+      Expr::Call(r#fn, exprs) => {
+        match self.eval_expr_with_scope(scope, *r#fn)? {
+          Expr::Fn(symbols, body) => {
+            let mut fn_scope = scope.clone();
+            symbols.into_iter().zip(exprs.into_iter()).for_each(
+              |(symbol, expr)| {
+                fn_scope.vars_mut().insert(symbol, expr);
+              },
+            );
+
+            self.eval_expr_with_scope(&mut fn_scope, *body)
+          }
+          r#fn => Ok(Expr::Call(Box::new(r#fn), exprs)),
+        }
+      }
+
+      Expr::Unary(op, rhs) => match self.eval_expr_with_scope(scope, *rhs)? {
+        Expr::Real(rhs) => match op {
+          UnOp::Neg => Ok(Expr::Real(-rhs)),
+        },
+        rhs => Err(EvalError::Unary(op, rhs)),
+      },
+      Expr::Binary(op, lhs, rhs) => match (
+        self.eval_expr_with_scope(scope, *lhs)?,
+        self.eval_expr_with_scope(scope, *rhs)?,
+      ) {
+        (Expr::Real(lhs), Expr::Real(rhs)) => match op {
+          BinOp::Add => Ok(Expr::Real(lhs + rhs)),
+          BinOp::Sub => Ok(Expr::Real(lhs - rhs)),
+          BinOp::Mul => Ok(Expr::Real(lhs * rhs)),
+          BinOp::Div => Ok(Expr::Real(lhs / rhs)),
+
+          BinOp::Eq => Ok(
+            (lhs == rhs)
+              .then(|| {
+                Expr::Binary(
+                  op,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              })
+              .unwrap_or_else(|| {
+                Expr::Binary(
+                  BinOp::Ne,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              }),
+          ),
+          BinOp::Ne => Ok(
+            (lhs != rhs)
+              .then(|| {
+                Expr::Binary(
+                  op,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              })
+              .unwrap_or_else(|| {
+                Expr::Binary(
+                  BinOp::Eq,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              }),
+          ),
+          BinOp::Lt => Ok(
+            (lhs < rhs)
+              .then(|| {
+                Expr::Binary(
+                  op,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              })
+              .unwrap_or_else(|| {
+                Expr::Binary(
+                  BinOp::Ge,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              }),
+          ),
+          BinOp::Gt => Ok(
+            (lhs > rhs)
+              .then(|| {
+                Expr::Binary(
+                  op,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              })
+              .unwrap_or_else(|| {
+                Expr::Binary(
+                  BinOp::Le,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              }),
+          ),
+          BinOp::Le => Ok(
+            (lhs <= rhs)
+              .then(|| {
+                Expr::Binary(
+                  op,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              })
+              .unwrap_or_else(|| {
+                Expr::Binary(
+                  BinOp::Gt,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              }),
+          ),
+          BinOp::Ge => Ok(
+            (lhs >= rhs)
+              .then(|| {
+                Expr::Binary(
+                  op,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              })
+              .unwrap_or_else(|| {
+                Expr::Binary(
+                  BinOp::Lt,
+                  Box::new(Expr::Real(lhs)),
+                  Box::new(Expr::Real(rhs)),
+                )
+              }),
+          ),
+        },
+        (lhs, rhs) => Err(EvalError::Binary(op, lhs, rhs)),
+      },
+
+      Expr::Let(symbol, body) => {
+        let body = self.eval_expr_with_scope(scope, *body)?;
+        scope.vars_mut().insert(symbol, body.clone());
+        Ok(Expr::Let(symbol, Box::new(body)))
+      }
+    }
+  }
+
+  /// Compile a <code>&[str](primitive@str)</code>.
+  #[inline]
+  pub fn compile<LE, PE>(&mut self, input: &str) -> CompileResult<Expr, LE, PE>
+  where
+    LE: Error<str>,
+    PE: Error<[Token]>,
+  {
+    lex::lexer()
+      .parse_with_state(input, &mut self.interner)
+      .into_result()
+      .map_err(CompileError::Lex)
+      .and_then(|tokens| {
+        parse::parser()
+          .parse(&tokens)
+          .into_result()
+          .map_err(CompileError::Parse)
+      })
   }
 }
 
-/// Creates a pretty string for an experssion.
-pub fn display_expr(expr: &Expr, interner: &impl Interner<Ident>) -> String {
-  match expr {
-    Expr::Lit(lit) => display_lit(lit, interner),
+/// An evaluation scope.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Scope {
+  vars: HashMap<Symbol, Expr>,
+}
 
-    Expr::Var(ident) => interner.resolve(ident).to_string(),
-    Expr::Call(lhs, args) => {
-      let args = args
-        .iter()
-        .map(|arg| display_expr(arg, interner))
-        .enumerate()
-        .fold(String::new(), |mut acc, (i, arg)| {
-          acc.push_str(&format!("{}{}", if i > 0 { ", " } else { "" }, arg));
-          acc
-        });
-      format!("{}({})", display_expr(lhs, interner), args)
-    }
+impl Scope {
+  /// Creates a [`Scope`].
+  #[inline]
+  pub const fn new(vars: HashMap<Symbol, Expr>) -> Self {
+    Self { vars }
+  }
 
-    Expr::Unary(op, rhs) => format!("{}{}", op, display_expr(rhs, interner)),
-    Expr::Binary(op, lhs, rhs) => format!(
-      "{} {} {}",
-      display_expr(lhs, interner),
-      op,
-      display_expr(rhs, interner)
-    ),
+  /// Returns a reference to the scope variables.
+  #[inline]
+  pub const fn vars(&self) -> &HashMap<Symbol, Expr> {
+    &self.vars
+  }
+
+  /// Returns a mutable reference to the scope variables.
+  #[inline]
+  // TODO: make this const when it stablised
+  pub fn vars_mut(&mut self) -> &mut HashMap<Symbol, Expr> {
+    &mut self.vars
   }
 }
 
-/// Creates a pretty string for a literal.
-pub fn display_lit(lit: &Lit, interner: &impl Interner<Ident>) -> String {
-  match lit {
-    Lit::Real(a) => a.to_string(),
-    Lit::Fn(args, body) => {
-      let args = args
-        .iter()
-        .map(|arg| interner.resolve(arg))
-        .enumerate()
-        .fold(String::new(), |mut acc, (i, arg)| {
-          acc.push_str(&format!("{}{}", if i > 0 { ", " } else { "" }, arg));
-          acc
-        });
-      format!("({}) -> {}", args, display_expr(body, interner))
-    }
-  }
+/// A compilation result convenience type.
+pub type CompileResult<T, LE, PE> = Result<T, CompileError<LE, PE>>;
+
+/// An evaluation result convenience type.
+pub type EvalResult<T> = Result<T, EvalError>;
+
+/// A compilation error.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, thiserror::Error)]
+pub enum CompileError<LE, PE>
+where
+  LE: Error<str>,
+  PE: Error<[Token]>,
+{
+  /// A lexer error.
+  #[error("a lexer error")]
+  Lex(Vec<LE>),
+  /// A parser error.
+  #[error("a parser error")]
+  Parse(Vec<PE>),
+}
+
+/// An evaluation error.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, thiserror::Error)]
+pub enum EvalError {
+  /// An invalid unary operand.
+  #[error("an invalid unary operand")]
+  Unary(UnOp, Expr),
+  /// An invalid binary operand(s).
+  #[error("an invalid binary operand(s)")]
+  Binary(BinOp, Expr, Expr),
 }
