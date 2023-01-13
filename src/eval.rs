@@ -88,11 +88,13 @@ impl<I: Interner> Engine<I> {
         match self.eval_expr_with_scope(scope, *r#fn)? {
           Expr::Fn(symbols, body) => {
             let mut fn_scope = scope.clone();
-            symbols.into_iter().zip(exprs.into_iter()).for_each(
+            symbols.into_iter().zip(exprs.into_iter()).try_for_each(
               |(symbol, expr)| {
+                let expr = self.eval_expr_with_scope(scope, expr)?;
                 fn_scope.vars_mut().insert(symbol, expr);
+                Ok(())
               },
-            );
+            )?;
 
             self.eval_expr_with_scope(&mut fn_scope, *body)
           }
