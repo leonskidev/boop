@@ -33,6 +33,7 @@ where
     just('-').to(Token::Minus),
     just('*').to(Token::Asterisk),
     just('/').to(Token::Slash),
+    just('^').to(Token::Circumflex),
     just(',').to(Token::Comma),
     just('=').to(Token::Equals),
     just('<').to(Token::LeftAngleBracket),
@@ -78,6 +79,8 @@ pub enum Token {
   Asterisk,
   /// The `/` symbol.
   Slash,
+  /// The `^` symbol.
+  Circumflex,
   /// The `,` symbol.
   Comma,
   /// The `=` symbol.

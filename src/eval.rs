@@ -118,6 +118,15 @@ impl<I: Interner> Engine<I> {
           BinOp::Sub => Expr::Real(lhs - rhs),
           BinOp::Mul => Expr::Real(lhs * rhs),
           BinOp::Div => Expr::Real(lhs / rhs),
+          BinOp::Pow => {
+            if rhs.frac().is_zero() && rhs.is_positive() {
+              let mut tmp = lhs;
+              (0..rhs.int().to_num::<u64>() - 1).for_each(|_| tmp *= lhs);
+              Expr::Real(tmp)
+            } else {
+              todo!("handle the other kinds of power")
+            }
+          }
 
           BinOp::Eq => (lhs == rhs)
             .then(|| {

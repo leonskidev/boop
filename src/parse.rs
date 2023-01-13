@@ -73,7 +73,18 @@ where
       .then(call)
       .foldr(|op, rhs| Expr::Unary(op, Box::new(rhs)));
 
-    let product_prefix = unary
+    let power = unary
+      .clone()
+      .then(
+        just(Token::Circumflex)
+          .to(BinOp::Pow)
+          .then(unary)
+          .repeated()
+          .collect::<Vec<_>>(),
+      )
+      .foldl(|lhs, (op, rhs)| Expr::Binary(op, Box::new(lhs), Box::new(rhs)));
+
+    let product_prefix = power
       .clone()
       .then(atom.repeated().collect::<Vec<_>>())
       .foldl(|lhs, rhs| Expr::Binary(BinOp::Mul, Box::new(lhs), Box::new(rhs)));
@@ -179,6 +190,8 @@ pub enum BinOp {
   Mul,
   /// Division.
   Div,
+  /// Power.
+  Pow,
 
   /// Equals.
   Eq,
@@ -201,6 +214,7 @@ impl fmt::Display for BinOp {
       Self::Sub => write!(f, "-"),
       Self::Mul => write!(f, "*"),
       Self::Div => write!(f, "/"),
+      Self::Pow => write!(f, "^"),
 
       Self::Eq => write!(f, "="),
       Self::Ne => write!(f, "!="),
