@@ -75,7 +75,7 @@ impl<I: Interner> Engine<I> {
         .cloned()
         .unwrap_or(Expr::Var(symbol)),
 
-      Expr::Call(r#fn, exprs) => {
+      Expr::Call(r#fn, mut exprs) => {
         match self.eval_expr_with_scope(scope, *r#fn) {
           Expr::Fn(symbols, body) => {
             let mut fn_scope = scope.clone();
@@ -87,6 +87,17 @@ impl<I: Interner> Engine<I> {
             );
 
             self.eval_expr_with_scope(&mut fn_scope, *body)
+          }
+          Expr::Real(lhs) if exprs.len() == 1 => {
+            let rhs = self.eval_expr_with_scope(scope, exprs.pop().unwrap());
+            self.eval_expr_with_scope(
+              scope,
+              Expr::Binary(
+                BinOp::Mul,
+                Box::new(Expr::Real(lhs)),
+                Box::new(rhs),
+              ),
+            )
           }
           r#fn => Expr::Call(Box::new(r#fn), exprs),
         }

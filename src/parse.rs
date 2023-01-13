@@ -55,6 +55,7 @@ where
       );
 
     let call = atom
+      .clone()
       .then(
         expr
           .separated_by(just(Token::Comma))
@@ -72,13 +73,18 @@ where
       .then(call)
       .foldr(|op, rhs| Expr::Unary(op, Box::new(rhs)));
 
-    let product = unary
+    let product_prefix = unary
+      .clone()
+      .then(atom.repeated().collect::<Vec<_>>())
+      .foldl(|lhs, rhs| Expr::Binary(BinOp::Mul, Box::new(lhs), Box::new(rhs)));
+
+    let product = product_prefix
       .clone()
       .then(
         just(Token::Asterisk)
           .to(BinOp::Mul)
           .or(just(Token::Slash).to(BinOp::Div))
-          .then(unary)
+          .then(product_prefix)
           .repeated()
           .collect::<Vec<_>>(),
       )
