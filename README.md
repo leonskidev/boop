@@ -31,7 +31,7 @@ let sq = (x) -> x * x
 // then apply the function `square` to the variable `a` and compare
 // it against a wrong answer
 => sq(a) = 101
-100 = 101
+100 != 101
 ```
 
 Internally, **Boop** uses a 128-bit fixed-point number split into two 64-bits
