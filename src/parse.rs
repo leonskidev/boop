@@ -12,6 +12,14 @@ pub fn parser<'a, E>() -> impl Parser<'a, [Token], Expr, E>
 where
   E: 'a + Error<[Token]>,
 {
+  let recover_delimiters = |start, end| {
+    just(Token::LeftBracket)
+      .ignore_then(take_until(just(Token::RightBracket)).ignored())
+      .try_map(move |_, span| {
+        Err(E::expected_found([Some(start)], Some(end), span))
+      })
+  };
+
   let real =
     any()
       .filter(|token| matches!(token, Token::Real(_)))
@@ -41,7 +49,11 @@ where
       )
       .then_ignore(just(Token::RightArrow))
       .then(expr.clone())
-      .map(|(symbols, body)| Expr::Fn(symbols, Box::new(body)));
+      .map(|(symbols, body)| Expr::Fn(symbols, Box::new(body)))
+      .recover_with(recover_delimiters(
+        Token::LeftBracket,
+        Token::RightBracket,
+      ));
 
     let atom = real
       // TODO: remove this when the formatting stops being so weird
@@ -52,7 +64,11 @@ where
         expr
           .clone()
           .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
-      );
+      )
+      .recover_with(recover_delimiters(
+        Token::LeftBracket,
+        Token::RightBracket,
+      ));
 
     let call = atom
       .clone()
