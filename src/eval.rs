@@ -241,12 +241,12 @@ impl<I: Interner> Engine<I> {
     lex::lexer()
       .parse_with_state(input, &mut self.interner)
       .into_result()
-      .map_err(CompileError::Lex)
+      .map_err(|e| e.into_iter().map(CompileError::Lex).collect())
       .and_then(|tokens| {
         parse::parser()
           .parse(&tokens)
           .into_result()
-          .map_err(CompileError::Parse)
+          .map_err(|e| e.into_iter().map(CompileError::Parse).collect())
       })
   }
 }
@@ -279,7 +279,7 @@ impl Scope {
 }
 
 /// A compilation result convenience type.
-pub type CompileResult<T, LE, PE> = Result<T, CompileError<LE, PE>>;
+pub type CompileResult<T, LE, PE> = Result<T, Vec<CompileError<LE, PE>>>;
 
 /// A compilation error.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, thiserror::Error)]
@@ -290,8 +290,8 @@ where
 {
   /// A lexer error.
   #[error("a lexer error")]
-  Lex(Vec<LE>),
+  Lex(LE),
   /// A parser error.
   #[error("a parser error")]
-  Parse(Vec<PE>),
+  Parse(PE),
 }

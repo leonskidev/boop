@@ -1,5 +1,5 @@
 use boop::{
-  eval::{Engine, Scope},
+  eval::{CompileError, Engine, Scope},
   fmt::Formatter,
 };
 use chumsky::zero_copy::error::Rich;
@@ -21,12 +21,16 @@ fn main() {
 }
 
 fn eval(engine: &mut Engine<Rodeo>, scope: &mut Scope, input: &str) {
-  let expr = engine
-    .eval_with_scope::<Rich<_>, Rich<_>>(scope, input)
-    // TODO: handle errors
-    .unwrap();
+  let expr = engine.eval_with_scope::<Rich<_>, Rich<_>>(scope, input);
 
-  println!("{}", Formatter::new(engine, &expr));
+  match expr {
+    Ok(expr) => println!("{}", Formatter::new(engine, &expr)),
+    // TODO: use ariadne once the inner error data becomes available
+    Err(errs) => errs.into_iter().for_each(|e| match e {
+      CompileError::Lex(e) => eprintln!("ERROR: {:?}", e),
+      CompileError::Parse(e) => eprintln!("ERROR: {:?}", e),
+    }),
+  }
 }
 
 fn repl(engine: &mut Engine<Rodeo>, scope: &mut Scope) {

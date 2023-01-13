@@ -14,7 +14,7 @@ thiserror = "1"
 
 clap = { version = "4", features = ["derive"] }
 reedline = { version = "0.14.0", features = ["clipboard"] }
-ariadne = "0.1.5"
+# ariadne = "0.1.5"
 
 [dependencies.chumsky]
 git = "https://github.com/zesterer/chumsky"
