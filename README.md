@@ -26,14 +26,12 @@ let's do a quick calculation and follow what happens:
 let a = 10
 // define the function `square` which takes in the variable `x`;
 // it should square `x`
-=> let square(x) = x^2
-let square(x) = x ^ 2
-// then apply the function `square` to the variable `a`
-=> square(a)
-100
-// let's compare it against our faulty existing knowledge
-=> square(a) = 101
-100 != 101
+=> let sq = x -> x*x
+let sq = (x) -> x * x
+// then apply the function `square` to the variable `a` and compare
+// it against a wrong answer
+=> sq(a) = 101
+100 = 101
 ```
 
 Internally, **Boop** uses a 128-bit fixed-point number split into two 64-bits
