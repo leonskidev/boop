@@ -13,8 +13,8 @@ where
   E: 'a + Error<[Token]>,
 {
   let recover_delimiters = |start, end| {
-    just(Token::LeftBracket)
-      .ignore_then(take_until(just(Token::RightBracket)).ignored())
+    just(start)
+      .ignore_then(take_until(just(end)).ignored())
       .try_map(move |_, span| {
         Err(E::expected_found([Some(start)], Some(end), span))
       })
