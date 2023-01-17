@@ -149,13 +149,28 @@ where
     comapre
   });
 
+  let let_fn = just(Token::Let)
+    .ignore_then(symbol)
+    .then(
+      symbol
+        .separated_by(just(Token::Comma))
+        .collect()
+        .delimited_by(just(Token::LeftBracket), just(Token::RightBracket)),
+    )
+    .then_ignore(just(Token::Equals))
+    .then(expr.clone())
+    .map(|((symbol, symbols), body)| {
+      Expr::Let(symbol, Box::new(Expr::Fn(symbols, Box::new(body))))
+    })
+    .recover_with(recover_delimiters(Token::LeftBracket, Token::RightBracket));
+
   let r#let = just(Token::Let)
     .ignore_then(symbol)
     .then_ignore(just(Token::Equals))
     .then(expr.clone())
     .map(|(symbol, body)| Expr::Let(symbol, Box::new(body)));
 
-  r#let.or(expr).then_ignore(end())
+  let_fn.or(r#let).or(expr).then_ignore(end())
 }
 
 /// Represents an expression.
