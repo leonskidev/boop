@@ -106,7 +106,7 @@ dependencies = [
 [[package]]
 name = "chumsky"
 version = "0.8.0"
-source = "git+https://github.com/zesterer/chumsky?rev=6b12d98de5b0d53353d0c4cdcb24554494cb6059#6b12d98de5b0d53353d0c4cdcb24554494cb6059"
+source = "git+https://github.com/zesterer/chumsky?rev=135b577e4c77865df5723aa3f3be7105aab425b5#135b577e4c77865df5723aa3f3be7105aab425b5"
 dependencies = [
  "hashbrown 0.12.3",
  "stacker",
