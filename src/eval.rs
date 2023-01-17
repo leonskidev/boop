@@ -61,13 +61,17 @@ impl<I: Interner> Engine<I> {
 
   /// Evaluate an [`Expr`].
   #[inline]
-  pub fn eval_expr(&self, expr: Expr) -> Expr {
+  pub fn eval_expr(&mut self, expr: Expr) -> Expr {
     self.eval_expr_with_scope(&mut Scope::default(), expr)
   }
 
   /// Evaluate an [`Expr`] with the provided [`Scope`].
-  pub fn eval_expr_with_scope(&self, scope: &mut Scope, expr: Expr) -> Expr {
-    match expr {
+  pub fn eval_expr_with_scope(
+    &mut self,
+    scope: &mut Scope,
+    expr: Expr,
+  ) -> Expr {
+    let expr = match expr {
       Expr::Real(_) | Expr::Fn(_, _) => expr,
       Expr::Var(symbol) => scope
         .vars()
@@ -228,7 +232,11 @@ impl<I: Interner> Engine<I> {
         scope.vars_mut().insert(symbol, body.clone());
         Expr::Let(symbol, Box::new(body))
       }
-    }
+    };
+    scope
+      .vars_mut()
+      .insert(self.interner.get_or_intern("ans"), expr.clone());
+    expr
   }
 
   /// Compile a <code>&[str](primitive@str)</code>.
