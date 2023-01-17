@@ -56,7 +56,6 @@ where
       ));
 
     let atom = real
-      // TODO: remove this when the formatting stops being so weird
       .map(Expr::Real)
       .or(r#fn)
       .or(var)
