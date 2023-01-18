@@ -175,22 +175,22 @@ where
 /// Represents an expression.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
-  /// A real number.
+  /// A real number: `123`, `1.23`.
   Real(Real),
-  /// A variable.
+  /// A variable: `x`, `hello`.
   Var(Symbol),
-  /// A function.
+  /// A function: `x -> x^2`, `(x, y) -> x+y`.
   Fn(Vec<Symbol>, Box<Self>),
 
-  /// A function call.
+  /// A function call: `a(10)`.
   Call(Box<Self>, Vec<Self>),
 
-  /// A unary operation.
+  /// A unary operation: `-1`.
   Unary(UnOp, Box<Self>),
-  /// A binary operation.
+  /// A binary operation: `1 + 2`, `1 * 2`.
   Binary(BinOp, Box<Self>, Box<Self>),
 
-  /// A let definition.
+  /// A let definition: `let a = 123`.
   Let(Symbol, Box<Self>),
 }
 
