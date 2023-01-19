@@ -1,6 +1,6 @@
 //! Contains the parser.
 
-use core::hint::unreachable_unchecked;
+use core::hint;
 
 use chumsky::zero_copy::{error::Error, prelude::*};
 use core::fmt;
@@ -25,7 +25,7 @@ where
       .filter(|token| matches!(token, Token::Real(_)))
       .map(|token| match token {
         Token::Real(a) => a,
-        _ => unsafe { unreachable_unchecked() },
+        _ => unsafe { hint::unreachable_unchecked() },
       });
 
   let symbol =
@@ -33,7 +33,7 @@ where
       .filter(|token| matches!(token, Token::Symbol(_)))
       .map(|token| match token {
         Token::Symbol(a) => a,
-        _ => unsafe { unreachable_unchecked() },
+        _ => unsafe { hint::unreachable_unchecked() },
       });
 
   let expr = recursive(|expr| {
