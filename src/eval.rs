@@ -29,7 +29,7 @@ impl<I: Interner> Engine<I> {
 
   /// Returns a mutable reference to the engine interner.
   #[inline]
-  // TODO: make this const when it stablised
+  // TODO: make this const when it's stablised
   pub fn interner_mut(&mut self) -> &mut I {
     &mut self.interner
   }
@@ -280,7 +280,7 @@ impl Scope {
 
   /// Returns a mutable reference to the scope variables.
   #[inline]
-  // TODO: make this const when it stablised
+  // TODO: make this const when it's stablised
   pub fn vars_mut(&mut self) -> &mut HashMap<Symbol, Expr> {
     &mut self.vars
   }
