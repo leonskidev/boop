@@ -201,11 +201,18 @@ pub enum UnOp {
   Neg,
 }
 
+impl UnOp {
+  /// Returns the <code>&[str](primitive@str)</code> of this operator.
+  pub const fn as_str<'a>(self) -> &'a str {
+    match self {
+      Self::Neg => "-",
+    }
+  }
+}
+
 impl fmt::Display for UnOp {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Neg => write!(f, "-"),
-    }
+    write!(f, "{}", self.as_str())
   }
 }
 
@@ -237,21 +244,28 @@ pub enum BinOp {
   Ge,
 }
 
+impl BinOp {
+  /// Returns the <code>&[str](primitive@str)</code> of this operator.
+  pub const fn as_str<'a>(self) -> &'a str {
+    match self {
+      Self::Add => "+",
+      Self::Sub => "-",
+      Self::Mul => "*",
+      Self::Div => "/",
+      Self::Pow => "^",
+
+      Self::Eq => "=",
+      Self::Ne => "!=",
+      Self::Lt => "<",
+      Self::Gt => ">",
+      Self::Le => "<=",
+      Self::Ge => ">=",
+    }
+  }
+}
+
 impl fmt::Display for BinOp {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Add => write!(f, "+"),
-      Self::Sub => write!(f, "-"),
-      Self::Mul => write!(f, "*"),
-      Self::Div => write!(f, "/"),
-      Self::Pow => write!(f, "^"),
-
-      Self::Eq => write!(f, "="),
-      Self::Ne => write!(f, "!="),
-      Self::Lt => write!(f, "<"),
-      Self::Gt => write!(f, ">"),
-      Self::Le => write!(f, "<="),
-      Self::Ge => write!(f, ">="),
-    }
+    write!(f, "{}", self.as_str())
   }
 }
