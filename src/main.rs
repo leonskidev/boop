@@ -17,10 +17,14 @@ fn main() {
   match cli.command {
     Command::Inline { input } => eval(&mut engine, &mut scope, &input),
     Command::Repl => repl(&mut engine, &mut scope),
-    Command::Stdin => std::io::stdin()
-      .lines()
-      .map(|input| input.unwrap())
-      .for_each(|input| eval(&mut engine, &mut scope, &input)),
+    Command::Stdin => {
+      if atty::isnt(atty::Stream::Stdin) {
+        std::io::stdin()
+          .lines()
+          .map(|input| input.unwrap())
+          .for_each(|input| eval(&mut engine, &mut scope, &input))
+      }
+    }
   }
 }
 

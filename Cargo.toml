@@ -16,6 +16,8 @@ clap = { version = "4", features = ["derive"] }
 reedline = { version = "0.14.0", features = ["clipboard"] }
 # ariadne = "0.1.5"
 
+atty = "0.2.14"
+
 [dependencies.chumsky]
 git = "https://github.com/zesterer/chumsky"
 rev = "135b577e4c77865df5723aa3f3be7105aab425b5"
