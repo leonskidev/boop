@@ -16,7 +16,17 @@ fn main() {
 
   match cli.command {
     Command::Inline { input } => eval(&mut engine, &mut scope, &input),
-    Command::Repl => repl(&mut engine, &mut scope),
+    Command::Repl { dumb } => {
+      if dumb {
+        std::io::stdin()
+          .lines()
+          // TODO: handle errors
+          .map(|input| input.unwrap())
+          .for_each(|input| eval(&mut engine, &mut scope, &input))
+      } else {
+        repl(&mut engine, &mut scope)
+      }
+    }
     Command::Stdin => {
       if atty::isnt(atty::Stream::Stdin) {
         std::io::stdin()
@@ -75,7 +85,11 @@ enum Command {
   Inline { input: String },
   /// Starts the interactive REPL [alias: `>`].
   #[command(alias = ">")]
-  Repl,
+  Repl {
+    /// Whether to use a dumb REPL instead.
+    #[arg(short, long)]
+    dumb: bool,
+  },
   /// Evaluates the provided STDIN [alias: `-`].
   #[command(alias = "-")]
   Stdin,
