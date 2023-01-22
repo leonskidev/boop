@@ -17,6 +17,10 @@ fn main() {
   match cli.command {
     Command::Inline { input } => eval(&mut engine, &mut scope, &input),
     Command::Repl => repl(&mut engine, &mut scope),
+    Command::Stdin => std::io::stdin()
+      .lines()
+      .map(|input| input.unwrap())
+      .for_each(|input| eval(&mut engine, &mut scope, &input)),
   }
 }
 
@@ -67,6 +71,9 @@ enum Command {
   /// Starts the interactive REPL [alias: `>`].
   #[command(alias = ">")]
   Repl,
+  /// Evaluates the provided STDIN [alias: `-`].
+  #[command(alias = "-")]
+  Stdin,
 }
 
 #[derive(Default)]
