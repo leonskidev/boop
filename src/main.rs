@@ -21,6 +21,7 @@ fn main() {
       if atty::isnt(atty::Stream::Stdin) {
         std::io::stdin()
           .lines()
+          // TODO: handle errors
           .map(|input| input.unwrap())
           .for_each(|input| eval(&mut engine, &mut scope, &input))
       }
