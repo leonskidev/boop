@@ -20,4 +20,4 @@ atty = "0.2.14"
 
 [dependencies.chumsky]
 git = "https://github.com/zesterer/chumsky"
-rev = "135b577e4c77865df5723aa3f3be7105aab425b5"
+rev = "31153df7c8aca078e6bb6b9890cf608b39291804"
