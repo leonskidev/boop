@@ -1,8 +1,8 @@
-//! A mathematical-y language.
+//!
 
+#![no_std]
 #![forbid(missing_docs)]
 
-pub mod eval;
-pub mod fmt;
 pub mod lex;
 pub mod parse;
+pub mod syntax;

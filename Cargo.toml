@@ -1,23 +1,8 @@
 [package]
 name = "boop"
-description = "A glorified calculator for all your numbery needs."
-authors = ["Leon Davis <leonskidev@pm.me>", "Shane Vandegrift <vandesm14@gmail.com>"]
-license = "MIT OR Apache-2.0"
-
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 fixed = "1"
-lasso = "0.6.0"
-thiserror = "1"
-
-clap = { version = "4", features = ["derive"] }
-reedline = { version = "0.14.0", features = ["clipboard"] }
-# ariadne = "0.1.5"
-
-atty = "0.2.14"
-
-[dependencies.chumsky]
-git = "https://github.com/zesterer/chumsky"
-rev = "31153df7c8aca078e6bb6b9890cf608b39291804"
+syntree = "0.13.2"

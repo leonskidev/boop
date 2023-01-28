@@ -1,102 +1,115 @@
 //! Contains the lexer.
 
-use chumsky::zero_copy::{error::Error, prelude::*};
-use fixed::{types::extra::U64, FixedI128};
-use lasso::{Interner, Spur};
+use core::{
+  iter::{self, Enumerate, Peekable},
+  ops::Range,
+  str::Chars,
+};
 
-/// Creates a lexer.
-pub fn lexer<'a, E, S>() -> impl Parser<'a, str, Vec<Token>, E, S>
-where
-  E: 'a + Error<str>,
-  S: 'a + Interner,
-{
-  let real = text::digits::<_, _, E, _>(10)
-    // TODO: this would be a nice-to-have
-    // .separated_by(just(','))
-    .then(just('.').then(text::digits(10)).or_not())
-    .slice()
-    .try_map(|s, span| {
-      s.parse()
-        .map_err(|_| E::expected_found([Some('0')], s.chars().next(), span))
-    })
-    .map(Token::Real);
+use crate::syntax::Syntax;
 
-  let keyword = text::keyword("let").to(Token::Let);
-
-  let operator = choice((
-    just("->").to(Token::RightArrow),
-    just("!=").to(Token::ExclamationEquals),
-    just("<=").to(Token::LeftAngleBracketEquals),
-    just(">=").to(Token::RightAngleBracketEquals),
-    //
-    just('+').to(Token::Plus),
-    just('-').to(Token::Minus),
-    just('*').to(Token::Asterisk),
-    just('/').to(Token::Slash),
-    just('^').to(Token::Circumflex),
-    just(',').to(Token::Comma),
-    just('=').to(Token::Equals),
-    just('<').to(Token::LeftAngleBracket),
-    just('>').to(Token::RightAngleBracket),
-    just('(').to(Token::LeftBracket),
-    just(')').to(Token::RightBracket),
-  ));
-
-  let symbol = text::ident::<_, _, _, S>()
-    .map_with_state(|s, _, state| state.get_or_intern(s))
-    .map(Token::Symbol);
-
-  let token = real.or(operator).or(keyword).or(symbol);
-
-  token.padded().repeated().collect().then_ignore(end())
+/// A lexer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Lexer<'a> {
+  source: &'a str,
 }
 
-/// Represents a source code token.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Token {
-  /// A real number.
-  Real(Real),
-  /// A symbol.
-  Symbol(Symbol),
+impl<'a> Lexer<'a> {
+  /// Creates a [`Lexer`].
+  #[inline]
+  pub const fn new(source: &'a str) -> Self {
+    Self { source }
+  }
 
-  /// The `let` keyword.
-  Let,
+  /// Returns the <code>&[str]</code> slice within the input <code>&[str]</code>
+  /// that a span refers to.
+  #[inline]
+  pub fn slice(&self, span: Span) -> Option<&str> {
+    self.source.get(span)
+  }
 
-  /// The `->` symbol.
-  RightArrow,
-  /// The `!=` symbol.
-  ExclamationEquals,
-  /// The `<=` symbol.
-  LeftAngleBracketEquals,
-  /// The `>=` symbol.
-  RightAngleBracketEquals,
-
-  /// The `+` symbol.
-  Plus,
-  /// The `-` symbol.
-  Minus,
-  /// The `*` symbol.
-  Asterisk,
-  /// The `/` symbol.
-  Slash,
-  /// The `^` symbol.
-  Circumflex,
-  /// The `,` symbol.
-  Comma,
-  /// The `=` symbol.
-  Equals,
-  /// The `<` symbol.
-  LeftAngleBracket,
-  /// The `>` symbol.
-  RightAngleBracket,
-  /// The `(` symbol.
-  LeftBracket,
-  /// The `)` symbol.
-  RightBracket,
+  /// Creates a [`Lex`].
+  #[inline]
+  pub fn lex(&self) -> Lex<'a> {
+    Lex::new(self.source)
+  }
 }
 
-/// Represents a real number.
-pub type Real = FixedI128<U64>;
+impl<'a> IntoIterator for Lexer<'a> {
+  type IntoIter = Lex<'a>;
+  type Item = <Lex<'a> as Iterator>::Item;
 
-/// Represents a symbol.
-pub type Symbol = Spur;
+  #[inline]
+  fn into_iter(self) -> Self::IntoIter {
+    self.lex()
+  }
+}
+
+/// A lexer iterator.
+#[derive(Debug, Clone)]
+pub struct Lex<'a> {
+  chars: Peekable<Enumerate<Chars<'a>>>,
+}
+
+impl<'a> Lex<'a> {
+  /// Creates a [`Lex`].
+  #[inline]
+  pub fn new(source: &'a str) -> Self {
+    Self {
+      chars: source.chars().enumerate().peekable(),
+    }
+  }
+
+  fn take_while(&mut self, f: impl Fn(&char) -> bool) -> Option<usize> {
+    iter::from_fn(|| self.chars.next_if(|(_, ch)| f(ch)))
+      .last()
+      .map(|(i, _)| i + 1)
+  }
+}
+
+impl<'a> Iterator for Lex<'a> {
+  type Item = (Syntax, Span);
+
+  fn next(&mut self) -> Option<Self::Item> {
+    let (start, ch) = self.chars.next()?;
+    match ch {
+      '+' => Some((Syntax::Add, start..start + 1)),
+      '-' => Some((Syntax::Sub, start..start + 1)),
+      '*' => Some((Syntax::Mul, start..start + 1)),
+      '/' => Some((Syntax::Div, start..start + 1)),
+      '(' => Some((Syntax::LeftBracket, start..start + 1)),
+      ')' => Some((Syntax::RightBracket, start..start + 1)),
+      ch if ch.is_whitespace() => {
+        let end = self
+          .take_while(|ch| ch.is_whitespace())
+          .unwrap_or(start + 1);
+        Some((Syntax::Whitespace, start..end))
+      }
+      ch if ch.is_ascii_digit() => {
+        let mut end =
+          self.take_while(char::is_ascii_digit).unwrap_or(start + 1);
+
+        if self.chars.next_if(|(_, ch)| *ch == '.').is_some() {
+          end = self.take_while(char::is_ascii_digit).unwrap_or(end + 1);
+        }
+
+        Some((Syntax::Number, start..end))
+      }
+      ch if ch.is_alphabetic() => {
+        let end = self
+          .take_while(|ch| ch.is_alphabetic())
+          .unwrap_or(start + 1);
+        Some((Syntax::Symbol, start..end))
+      }
+      _ => {
+        let end = self
+          .take_while(|ch| !ch.is_whitespace())
+          .unwrap_or(start + 1);
+        Some((Syntax::Error, start..end))
+      }
+    }
+  }
+}
+
+/// A span within a source.
+pub type Span = Range<usize>;
