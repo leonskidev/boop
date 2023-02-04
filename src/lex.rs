@@ -2,11 +2,8 @@
 
 use core::{
   iter::{self, Enumerate, Peekable},
-  ops::Range,
   str::Chars,
 };
-
-use crate::syntax::Syntax;
 
 /// A lexer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -25,7 +22,7 @@ impl<'a> Lexer<'a> {
   /// that a span refers to.
   #[inline]
   pub fn slice(&self, span: Span) -> Option<&str> {
-    self.source.get(span)
+    self.source.get(span.0..span.1)
   }
 
   /// Creates a [`Lex`].
@@ -68,23 +65,23 @@ impl<'a> Lex<'a> {
 }
 
 impl<'a> Iterator for Lex<'a> {
-  type Item = (Syntax, Span);
+  type Item = Token;
 
   fn next(&mut self) -> Option<Self::Item> {
     let (start, ch) = self.chars.next()?;
     match ch {
-      '+' => Some((Syntax::Add, start..start + 1)),
-      '-' => Some((Syntax::Sub, start..start + 1)),
-      '*' => Some((Syntax::Mul, start..start + 1)),
-      '/' => Some((Syntax::Div, start..start + 1)),
-      '(' => Some((Syntax::LeftBracket, start..start + 1)),
-      ')' => Some((Syntax::RightBracket, start..start + 1)),
       ch if ch.is_whitespace() => {
-        let end = self
+        self
           .take_while(|ch| ch.is_whitespace())
           .unwrap_or(start + 1);
-        Some((Syntax::Whitespace, start..end))
+        self.next()
       }
+      '+' => Some(Token::new(TokenKind::Plus, (start, start + 1))),
+      '-' => Some(Token::new(TokenKind::Minus, (start, start + 1))),
+      '*' => Some(Token::new(TokenKind::Asterisk, (start, start + 1))),
+      '/' => Some(Token::new(TokenKind::Slash, (start, start + 1))),
+      '(' => Some(Token::new(TokenKind::LeftBracket, (start, start + 1))),
+      ')' => Some(Token::new(TokenKind::RightBracket, (start, start + 1))),
       ch if ch.is_ascii_digit() => {
         let mut end =
           self.take_while(char::is_ascii_digit).unwrap_or(start + 1);
@@ -93,23 +90,66 @@ impl<'a> Iterator for Lex<'a> {
           end = self.take_while(char::is_ascii_digit).unwrap_or(end + 1);
         }
 
-        Some((Syntax::Number, start..end))
+        Some(Token::new(TokenKind::Number, (start, end)))
       }
       ch if ch.is_alphabetic() => {
         let end = self
           .take_while(|ch| ch.is_alphabetic())
           .unwrap_or(start + 1);
-        Some((Syntax::Symbol, start..end))
+        Some(Token::new(TokenKind::Symbol, (start, end)))
       }
       _ => {
         let end = self
           .take_while(|ch| !ch.is_whitespace())
           .unwrap_or(start + 1);
-        Some((Syntax::Error, start..end))
+        Some(Token::new(TokenKind::Error, (start, end)))
       }
     }
   }
 }
 
-/// A span within a source.
-pub type Span = Range<usize>;
+/// A span within from a start to an end in a source.
+pub type Span = (usize, usize);
+
+/// A token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Token {
+  /// The kind.
+  pub kind: TokenKind,
+  /// The span.
+  pub span: Span,
+}
+
+impl Token {
+  /// Creates a [`Token`].
+  #[inline]
+  pub const fn new(kind: TokenKind, span: Span) -> Self {
+    Self { kind, span }
+  }
+}
+
+/// A token kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TokenKind {
+  /// Consecutive unknown or invalid [`char`]s.
+  Error,
+
+  /// A number: `123`, `1.23`.
+  Number,
+  /// A symbol: `x`, `sin`.
+  Symbol,
+
+  /// The `+` symbol.
+  Plus,
+  /// The `-` symbol.
+  Minus,
+  /// The `*` symbol.
+  Asterisk,
+  /// The `/` symbol.
+  Slash,
+
+  /// The `(` symbol.
+  LeftBracket,
+  /// The `)` symbol.
+  RightBracket,
+}

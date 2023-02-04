@@ -9,4 +9,4 @@ edition = "2021"
 
 [dependencies]
 fixed = "1"
-syntree = "0.13.2"
+thiserror = "1"
