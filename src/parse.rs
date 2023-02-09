@@ -2,91 +2,79 @@
 
 use core::{fmt, iter::Peekable};
 
-use fixed::{types::extra::U64, FixedI128, ParseFixedError};
-use thiserror::Error;
+use num_bigint::BigInt;
+use num_rational::BigRational;
 
-use crate::lex::{Lex, Lexer, Span, Token, TokenKind};
+use crate::lex::{Lexer, Token, TokenKind};
 
-/// A parser.
+/// A parser which converts a sequence of [`Token`]s into [`Stmt`]s.
 #[derive(Debug, Clone)]
 pub struct Parser<'a> {
-  lexer: Lexer<'a>,
-  tokens: Peekable<Lex<'a>>,
+  tokens: Peekable<Lexer<'a>>,
 }
 
 impl<'a> Parser<'a> {
   /// Creates a [`Parser`].
   #[inline]
-  pub fn new(lexer: Lexer<'a>) -> Self {
+  pub fn new(tokens: Lexer<'a>) -> Self {
     Self {
-      lexer,
-      tokens: lexer.lex().peekable(),
+      tokens: tokens.peekable(),
     }
   }
 
-  /// Parse an [`Expr`].
-  #[inline]
-  pub fn parse(&mut self) -> Result<Expr, Error> {
-    self.expr_bp(0)
-  }
+  fn expr_bp(&mut self, min_bp: u8) -> Option<Expr> {
+    self.skip_whitespace();
 
-  fn expr_bp(&mut self, min_bp: u8) -> Result<Expr, Error> {
-    let mut lhs = match self.tokens.next() {
-      Some(Token {
-        kind: TokenKind::Number,
-        span,
-      }) => self
-        .lexer
-        .slice(span)
-        .ok_or(Error::InvalidSlice)
-        .and_then(|s| s.parse().map_err(Error::InvalidNumber))
-        .map(|number| Expr::new(ExprKind::Number(number), span))?,
-      Some(Token {
-        kind: TokenKind::Symbol,
-        span,
-      }) => self
-        .lexer
-        .slice(span)
-        .ok_or(Error::InvalidSlice)
-        .map(|s| Expr::new(ExprKind::Symbol(s.to_string()), span))?,
-      Some(Token {
-        kind: TokenKind::LeftBracket,
-        span: l_span,
-      }) => {
-        let lhs = self.expr_bp(0)?;
-        match self.tokens.next() {
-          Some(Token {
-            kind: TokenKind::RightBracket,
-            span: r_span,
-          }) => Ok(Expr::new(
-            ExprKind::Group(Box::new(lhs)),
-            (l_span.0, r_span.1),
-          )),
-          _ => Err(Error::UnmatchedBracket),
-        }?
-      }
-      Some(Token {
+    let mut lhs = match self.tokens.next()? {
+      Token {
+        kind: TokenKind::Int(i),
+        ..
+      } => Expr::Int(i),
+      Token {
+        kind: TokenKind::Rat(i),
+        ..
+      } => Expr::Rat(i),
+      Token {
         kind: TokenKind::Minus,
-        span,
-      }) => {
+        ..
+      } => {
         let op = UnOp::Neg;
         let ((), r_bp) = op.binding_power();
-
-        let rhs = self.expr_bp(r_bp)?;
-        let span = (span.0, rhs.span.1);
-        Expr::new(ExprKind::Unary(op, Box::new(rhs)), span)
+        match self.expr_bp(r_bp) {
+          Some(rhs) => Expr::Unary(op, Box::new(rhs)),
+          _ => return Some(Expr::Error),
+        }
       }
-      Some(token) => Err(Error::UnexpectedToken(token))?,
-      None => Err(Error::UnexpectedEoi)?,
+      Token {
+        kind: TokenKind::LeftBracket,
+        ..
+      } => {
+        self.skip_whitespace();
+        match self.expr_bp(0) {
+          Some(lhs) => {
+            self.skip_whitespace();
+            if self
+              .tokens
+              .next_if(|token| token.kind == TokenKind::RightBracket)
+              .is_some()
+            {
+              lhs
+            } else {
+              Expr::Error
+            }
+          }
+          _ => return Some(Expr::Error),
+        }
+      }
+      _ => Expr::Error,
     };
 
     loop {
-      let op = match self.tokens.peek().copied() {
-        None
-        | Some(Token {
-          kind: TokenKind::RightBracket,
-          ..
-        }) => break,
+      self.skip_whitespace();
+
+      let op = match self.tokens.peek() {
+        None => break,
+
         Some(Token {
           kind: TokenKind::Plus,
           ..
@@ -103,75 +91,90 @@ impl<'a> Parser<'a> {
           kind: TokenKind::Slash,
           ..
         }) => BinOp::Div,
-        Some(token) => Err(Error::UnexpectedToken(token))?,
+        Some(Token {
+          kind: TokenKind::RightBracket,
+          ..
+        }) => break,
+
+        _ => return Some(Expr::Error),
       };
+
       let (l_bp, r_bp) = op.binding_power();
       if l_bp < min_bp {
         break;
       }
 
       self.tokens.next();
+      self.skip_whitespace();
 
-      let rhs = self.expr_bp(r_bp)?;
-      let span = (lhs.span.0, rhs.span.1);
-      lhs = Expr::new(ExprKind::Binary(op, Box::new((lhs, rhs))), span);
+      match self.expr_bp(r_bp) {
+        Some(rhs) => lhs = Expr::Binary(op, Box::new((lhs, rhs))),
+        _ => return Some(Expr::Error),
+      }
     }
 
-    Ok(lhs)
+    Some(lhs)
+  }
+
+  fn skip_whitespace(&mut self) {
+    while self
+      .tokens
+      .next_if(|Token { kind, .. }| *kind == TokenKind::Whitespace)
+      .is_some()
+    {}
+  }
+}
+
+impl<'a> Iterator for Parser<'a> {
+  type Item = Stmt;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    Some(Stmt::Expr(self.expr_bp(0)?))
+  }
+}
+
+/// A statement.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Stmt {
+  /// An expression.
+  Expr(Expr),
+}
+
+impl fmt::Display for Stmt {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Expr(expr) => write!(f, "{expr}"),
+    }
   }
 }
 
 /// An expression.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Expr {
-  /// The kind.
-  pub kind: ExprKind,
-  /// The span.
-  pub span: Span,
-}
+pub enum Expr {
+  /// An integer.
+  Int(BigInt),
+  /// A rational.
+  Rat(BigRational),
 
-impl Expr {
-  /// Creates a [`Expr`].
-  #[inline]
-  pub const fn new(kind: ExprKind, span: Span) -> Self {
-    Self { kind, span }
-  }
+  /// A unary operation.
+  Unary(UnOp, Box<Expr>),
+  /// A binary operation.
+  Binary(BinOp, Box<(Expr, Expr)>),
+
+  /// An invalid expression.
+  Error,
 }
 
 impl fmt::Display for Expr {
-  #[inline]
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{}", self.kind)
-  }
-}
-
-/// An expression kind.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ExprKind {
-  /// A number.
-  Number(FixedI128<U64>),
-  /// A symbol usage.
-  // TODO: make this not allocate
-  Symbol(String),
-
-  /// A precedence group.
-  Group(Box<Expr>),
-  /// A unary operation.
-  // TODO: make this not allocate
-  Unary(UnOp, Box<Expr>),
-  /// A binary operation.
-  // TODO: make this not allocate
-  Binary(BinOp, Box<(Expr, Expr)>),
-}
-
-impl fmt::Display for ExprKind {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Self::Number(n) => write!(f, "{n}"),
-      Self::Symbol(s) => write!(f, "{s}"),
-      Self::Group(expr) => write!(f, "({expr})"),
+      Self::Int(i) => write!(f, "{i}"),
+      Self::Rat(r) => write!(f, "{r}"),
+
       Self::Unary(op, rhs) => write!(f, "{op}{rhs}"),
-      Self::Binary(op, exprs) => write!(f, "{} {} {}", exprs.0, op, exprs.1),
+      Self::Binary(op, exprs) => write!(f, "{} {op} {}", exprs.0, exprs.1),
+
+      Self::Error => write!(f, "<error>"),
     }
   }
 }
@@ -185,7 +188,6 @@ pub enum UnOp {
 
 impl UnOp {
   /// Returns the binding power.
-  #[inline]
   pub const fn binding_power(self) -> ((), u8) {
     match self {
       Self::Neg => ((), 5),
@@ -216,7 +218,6 @@ pub enum BinOp {
 
 impl BinOp {
   /// Returns the binding power.
-  #[inline]
   pub const fn binding_power(self) -> (u8, u8) {
     match self {
       Self::Add | Self::Sub => (1, 2),
@@ -234,24 +235,4 @@ impl fmt::Display for BinOp {
       Self::Div => write!(f, "/"),
     }
   }
-}
-
-/// A [`Parser`] error.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-pub enum Error {
-  /// An invalid slice index.
-  #[error("invalid slice index")]
-  InvalidSlice,
-  /// An invalid number.
-  #[error("{0}")]
-  InvalidNumber(ParseFixedError),
-  /// An unmatched bracket.
-  #[error("unmatched bracket")]
-  UnmatchedBracket,
-  /// An unexpected token.
-  #[error("unexpected token: {0:?}")]
-  UnexpectedToken(Token),
-  /// An unexpected end of input.
-  #[error("unexpected end of input")]
-  UnexpectedEoi,
 }

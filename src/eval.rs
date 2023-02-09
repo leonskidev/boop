@@ -1,109 +1,85 @@
 //! Contains the evaluator.
 
-use std::collections::HashMap;
+use num_rational::BigRational;
 
-use thiserror::Error;
-
-use crate::parse::{BinOp, Expr, ExprKind, UnOp};
+use crate::{
+  lex::Lexer,
+  parse::{BinOp, Expr, Parser, Stmt, UnOp},
+};
 
 /// An evaluation engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Engine;
 
 impl Engine {
-  /// Evaluate an expression.
-  pub fn eval_with_scope(
-    scope: &mut Scope,
-    expr: Expr,
-  ) -> Result<ExprKind, Error> {
-    // TODO: remove this clone
-    let expr_kind_clone = expr.kind.clone();
-
-    match expr.kind {
-      ExprKind::Number(_) => Ok(expr.kind),
-      ExprKind::Symbol(symbol) => scope
-        .symbols()
-        .get(symbol.as_str())
-        .cloned()
-        .ok_or(Error::UndeclaredSymbolUsage(symbol)),
-
-      ExprKind::Group(expr) => Self::eval_with_scope(scope, *expr),
-      ExprKind::Unary(op, rhs) => match Self::eval_with_scope(scope, *rhs)? {
-        ExprKind::Number(rhs) => match op {
-          UnOp::Neg => Ok(ExprKind::Number(-rhs)),
-        },
-        _ => Err(Error::InvalidUnary(expr_kind_clone)),
-      },
-      ExprKind::Binary(op, exprs) => match (
-        Self::eval_with_scope(scope, exprs.0)?,
-        Self::eval_with_scope(scope, exprs.1)?,
-      ) {
-        (ExprKind::Number(lhs), ExprKind::Number(rhs)) => match op {
-          BinOp::Add => Ok(ExprKind::Number(lhs + rhs)),
-          BinOp::Sub => Ok(ExprKind::Number(lhs - rhs)),
-          BinOp::Mul => Ok(ExprKind::Number(lhs * rhs)),
-          BinOp::Div => Ok(ExprKind::Number(lhs / rhs)),
-        },
-        _ => Err(Error::InvalidBinary(expr_kind_clone)),
-      },
-    }
+  /// Evaluates a <code>&[str]</code>.
+  pub fn eval(input: &str) -> Option<Stmt> {
+    Some(Self::eval_stmt(Parser::new(Lexer::new(input)).next()?))
   }
-}
 
-/// An evaluation context.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Scope<'a> {
-  symbols: HashMap<&'a str, ExprKind>,
-}
-
-impl<'a> Scope<'a> {
-  /// Creates a [`Scope`].
-  #[inline]
-  pub fn new() -> Self {
-    Self {
-      symbols: HashMap::default(),
+  /// Evaluates a statement.
+  pub fn eval_stmt(stmt: Stmt) -> Stmt {
+    match stmt {
+      Stmt::Expr(expr) => Stmt::Expr(Self::eval_expr(expr)),
     }
   }
 
-  /// Creates a [`Scope`] with `symbols`.
-  #[inline]
-  pub const fn with_symbols(symbols: HashMap<&'a str, ExprKind>) -> Self {
-    Self { symbols }
-  }
+  /// Evaluates an expression.
+  pub fn eval_expr(expr: Expr) -> Expr {
+    match expr {
+      Expr::Int(_) => expr,
+      Expr::Rat(r) if r.is_integer() => Expr::Int(r.to_integer()),
+      Expr::Rat(_) => expr,
 
-  /// Returns a reference to the symbols.
-  #[inline]
-  pub const fn symbols(&self) -> &HashMap<&'a str, ExprKind> {
-    &self.symbols
-  }
+      Expr::Unary(op, rhs) => {
+        let expr = match Self::eval_expr(*rhs) {
+          Expr::Int(i) => match op {
+            UnOp::Neg => Expr::Int(-i),
+          },
+          Expr::Rat(r) => match op {
+            UnOp::Neg => Expr::Rat(-r),
+          },
 
-  /// Returns a mutable reference to the symbols.
-  #[inline]
-  pub fn symbols_mut(&mut self) -> &mut HashMap<&'a str, ExprKind> {
-    &mut self.symbols
+          // TODO: handle edge cases
+          _ => todo!(),
+        };
+        Self::eval_expr(expr)
+      }
+      Expr::Binary(op, exprs) => {
+        let expr = match (Self::eval_expr(exprs.0), Self::eval_expr(exprs.1)) {
+          (Expr::Int(a), Expr::Int(b)) => match op {
+            BinOp::Add => Expr::Int(a + b),
+            BinOp::Sub => Expr::Int(a - b),
+            BinOp::Mul => Expr::Int(a * b),
+            BinOp::Div => Expr::Rat(BigRational::from(a) / b),
+          },
+          (Expr::Rat(a), Expr::Rat(b)) => match op {
+            BinOp::Add => Expr::Rat(a + b),
+            BinOp::Sub => Expr::Rat(a - b),
+            BinOp::Mul => Expr::Rat(a * b),
+            BinOp::Div => Expr::Rat(a / b),
+          },
+          (Expr::Int(a), Expr::Rat(b)) => match op {
+            BinOp::Add => Expr::Rat(BigRational::from(a) + b),
+            BinOp::Sub => Expr::Rat(BigRational::from(a) - b),
+            BinOp::Mul => Expr::Rat(BigRational::from(a) * b),
+            BinOp::Div => Expr::Rat(BigRational::from(a) / b),
+          },
+          (Expr::Rat(a), Expr::Int(b)) => match op {
+            BinOp::Add => Expr::Rat(a + b),
+            BinOp::Sub => Expr::Rat(a - b),
+            BinOp::Mul => Expr::Rat(a * b),
+            BinOp::Div => Expr::Rat(a / b),
+          },
+
+          // TODO: handle edge cases
+          _ => todo!(),
+        };
+        Self::eval_expr(expr)
+      }
+
+      // TODO: handle edge cases
+      _ => todo!(),
+    }
   }
 }
-
-/// An [`Engine`] error.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Error)]
-pub enum Error {
-  /// An undeclared symbol usage.
-  #[error("undeclared symbol usage: {0}")]
-  UndeclaredSymbolUsage(String),
-  /// An unary expression.
-  #[error("invalid unary expression: {0}")]
-  InvalidUnary(ExprKind),
-  /// An binary expression.
-  #[error("invalid binary expression: {0}")]
-  InvalidBinary(ExprKind),
-}
-
-// TODO: implement this for easily reusable modules, such as std;
-//       add a feature to implement serde for it too
-
-// /// A module context.
-// #[derive(Debug, Clone, PartialEq, Eq, Default)]
-// pub struct Module<'a> {
-//   expr: Vec<Expr>,
-//   scope: Scope<'a>,
-// }

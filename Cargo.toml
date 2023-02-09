@@ -8,5 +8,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-fixed = "1"
-thiserror = "1"
+num-bigint = "0.4.3"
+num-rational = "0.4.1"
+
+# thiserror = "1"

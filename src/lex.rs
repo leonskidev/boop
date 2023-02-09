@@ -1,118 +1,97 @@
 //! Contains the lexer.
 
 use core::{
+  fmt,
   iter::{self, Enumerate, Peekable},
+  ops::Range,
   str::Chars,
 };
 
-/// A lexer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+use num_bigint::BigInt;
+use num_rational::BigRational;
+
+/// A lexer which converts a sequence of [`char`]s into [`Token`]s.
+#[derive(Debug, Clone)]
 pub struct Lexer<'a> {
-  source: &'a str,
+  input: &'a str,
+  chars: Peekable<Enumerate<Chars<'a>>>,
 }
 
 impl<'a> Lexer<'a> {
   /// Creates a [`Lexer`].
   #[inline]
-  pub const fn new(source: &'a str) -> Self {
-    Self { source }
-  }
-
-  /// Returns the <code>&[str]</code> slice within the input <code>&[str]</code>
-  /// that a span refers to.
-  #[inline]
-  pub fn slice(&self, span: Span) -> Option<&str> {
-    self.source.get(span.0..span.1)
-  }
-
-  /// Creates a [`Lex`].
-  #[inline]
-  pub fn lex(&self) -> Lex<'a> {
-    Lex::new(self.source)
-  }
-}
-
-impl<'a> IntoIterator for Lexer<'a> {
-  type IntoIter = Lex<'a>;
-  type Item = <Lex<'a> as Iterator>::Item;
-
-  #[inline]
-  fn into_iter(self) -> Self::IntoIter {
-    self.lex()
-  }
-}
-
-/// A lexer iterator.
-#[derive(Debug, Clone)]
-pub struct Lex<'a> {
-  chars: Peekable<Enumerate<Chars<'a>>>,
-}
-
-impl<'a> Lex<'a> {
-  /// Creates a [`Lex`].
-  #[inline]
-  pub fn new(source: &'a str) -> Self {
+  pub fn new(input: &'a str) -> Self {
     Self {
-      chars: source.chars().enumerate().peekable(),
+      input,
+      chars: input.chars().enumerate().peekable(),
     }
   }
 
-  fn take_while(&mut self, f: impl Fn(&char) -> bool) -> Option<usize> {
-    iter::from_fn(|| self.chars.next_if(|(_, ch)| f(ch)))
+  /// Returns a <code>&[str]</code> within the input at a [`Span`].
+  #[inline]
+  pub fn slice(&self, span: Span) -> Option<&'a str> {
+    self.input.get(span)
+  }
+
+  fn take_while(&mut self, f: fn(char) -> bool) -> Option<usize> {
+    iter::from_fn(|| self.chars.next_if(|&(_, ch)| f(ch)))
       .last()
-      .map(|(i, _)| i + 1)
+      .map(|(end, _)| end + 1)
+  }
+
+  fn take_error(&mut self, start: usize) -> Token {
+    let end = self
+      .take_while(|ch| !ch.is_whitespace() && !"+-*/()".contains(ch))
+      .unwrap_or(start + 1);
+    Token::new(TokenKind::Error, start..end)
   }
 }
 
-impl<'a> Iterator for Lex<'a> {
+impl<'a> Iterator for Lexer<'a> {
   type Item = Token;
 
   fn next(&mut self) -> Option<Self::Item> {
-    let (start, ch) = self.chars.next()?;
-    match ch {
-      ch if ch.is_whitespace() => {
-        self
-          .take_while(|ch| ch.is_whitespace())
-          .unwrap_or(start + 1);
-        self.next()
-      }
-      '+' => Some(Token::new(TokenKind::Plus, (start, start + 1))),
-      '-' => Some(Token::new(TokenKind::Minus, (start, start + 1))),
-      '*' => Some(Token::new(TokenKind::Asterisk, (start, start + 1))),
-      '/' => Some(Token::new(TokenKind::Slash, (start, start + 1))),
-      '(' => Some(Token::new(TokenKind::LeftBracket, (start, start + 1))),
-      ')' => Some(Token::new(TokenKind::RightBracket, (start, start + 1))),
+    self.chars.next().map(|(start, ch)| match ch {
+      '+' => Token::new(TokenKind::Plus, start..start + 1),
+      '-' => Token::new(TokenKind::Minus, start..start + 1),
+      '*' => Token::new(TokenKind::Asterisk, start..start + 1),
+      '/' => Token::new(TokenKind::Slash, start..start + 1),
+      '(' => Token::new(TokenKind::LeftBracket, start..start + 1),
+      ')' => Token::new(TokenKind::RightBracket, start..start + 1),
+
       ch if ch.is_ascii_digit() => {
-        let mut end =
-          self.take_while(char::is_ascii_digit).unwrap_or(start + 1);
+        let end = self
+          .take_while(|ch| ch.is_ascii_digit())
+          .unwrap_or(start + 1);
 
-        if self.chars.next_if(|(_, ch)| *ch == '.').is_some() {
-          end = self.take_while(char::is_ascii_digit).unwrap_or(end + 1);
+        if self.chars.next_if(|&(_, ch)| ch == '.').is_some() {
+          // TODO: handle demimals by converting them to rationals
+          self.take_error(start)
+        } else {
+          self
+            .slice(start..end)
+            .unwrap()
+            .parse()
+            .ok()
+            .map(|i| Token::new(TokenKind::Int(i), start..end))
+            .unwrap_or(self.take_error(start))
         }
+      }
 
-        Some(Token::new(TokenKind::Number, (start, end)))
+      ch if ch.is_whitespace() => {
+        let end = self.take_while(char::is_whitespace).unwrap_or(start + 1);
+        Token::new(TokenKind::Whitespace, start..end)
       }
-      ch if ch.is_alphabetic() => {
-        let end = self
-          .take_while(|ch| ch.is_alphabetic())
-          .unwrap_or(start + 1);
-        Some(Token::new(TokenKind::Symbol, (start, end)))
-      }
-      _ => {
-        let end = self
-          .take_while(|ch| !ch.is_whitespace())
-          .unwrap_or(start + 1);
-        Some(Token::new(TokenKind::Error, (start, end)))
-      }
-    }
+      _ => self.take_error(start),
+    })
   }
 }
 
-/// A span within from a start to an end in a source.
-pub type Span = (usize, usize);
+/// Convenience type for spans within an input.
+pub type Span = Range<usize>;
 
 /// A token.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
   /// The kind.
   pub kind: TokenKind,
@@ -129,15 +108,12 @@ impl Token {
 }
 
 /// A token kind.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-  /// Consecutive unknown or invalid [`char`]s.
-  Error,
-
-  /// A number: `123`, `1.23`.
-  Number,
-  /// A symbol: `x`, `sin`.
-  Symbol,
+  /// An integer.
+  Int(BigInt),
+  /// A rational.
+  Rat(BigRational),
 
   /// The `+` symbol.
   Plus,
@@ -147,9 +123,32 @@ pub enum TokenKind {
   Asterisk,
   /// The `/` symbol.
   Slash,
-
   /// The `(` symbol.
   LeftBracket,
   /// The `)` symbol.
   RightBracket,
+
+  /// Consecutive whitespace [`char`]s.
+  Whitespace,
+  /// Consecutive unknown or invalid [`char`]s.
+  Error,
+}
+
+impl fmt::Display for TokenKind {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Int(i) => write!(f, "{i}"),
+      Self::Rat(r) => write!(f, "{r}"),
+
+      Self::Plus => write!(f, "+"),
+      Self::Minus => write!(f, "-"),
+      Self::Asterisk => write!(f, "*"),
+      Self::Slash => write!(f, "/"),
+      Self::LeftBracket => write!(f, "("),
+      Self::RightBracket => write!(f, ")"),
+
+      Self::Whitespace => write!(f, " "),
+      Self::Error => write!(f, "<error>",),
+    }
+  }
 }
